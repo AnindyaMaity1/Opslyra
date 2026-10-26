@@ -89,8 +89,7 @@ Opslyra checks the input data for:
 -   Observed label counts.
 -   Whether timestamp fields can be parsed.
 
-Missing values are retained as missing values. The prototype does not
-silently fill them with invented data.
+Missing values are not retained as missing values. The prototype fills them with invented data.
 
 ### 4. NLP Ticket Classification
 
