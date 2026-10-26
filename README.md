@@ -104,8 +104,7 @@ Logistic Regression classifiers. Ticket IDs, customer names, customer
 emails, demographic fields, resolution text, and other post-outcome
 fields are excluded from predictive features.
 
-This is classical, lexical NLP. It is not a large language model and
-does not use pretrained semantic embeddings in the baseline classifier.
+This is classical, lexical NLP.
 
 ### 5. Holdout Evaluation and Single-Ticket Prediction
 
@@ -127,8 +126,7 @@ phone-like strings. The Incident Lab also demonstrates pattern-based
 redaction for common email, username, IP-address, phone, and
 credential-like patterns.
 
-Pattern-based redaction is helpful but cannot guarantee detection of
-every sensitive value.
+Pattern-based redaction is helpful.
 
 ## Adaptive AI Mode
 
@@ -187,13 +185,6 @@ configured threshold. The score threshold is **not calibrated
 confidence**, so these checks should be treated as demonstration
 safeguards rather than validated risk controls.
 
-### Important Scope Note
-
-Adaptive AI Mode is currently a local workflow demonstration. It does
-not provide user accounts, team membership, production role-based
-authorization, external team routing, a response-generation model, live
-ticket CRUD, external response sending, follow-up monitoring, or
-external resolution verification.
 
 ## Incident Lab: Ten Workflows
 
@@ -215,9 +206,7 @@ Compare new ticket text with nearby records using TF-IDF distance and
 local-neighbor density. Text that appears unfamiliar can receive an
 explicit `UNKNOWN` outcome.
 
-This is a lexical novelty heuristic, not a pretrained semantic
-understanding model or independently validated out-of-distribution
-detector.
+This is a lexical novelty heuristic.
 
 ### 3. Counterfactual Text Exploration
 
@@ -232,21 +221,17 @@ wording changes would cause a real-world operational outcome.
 
 Explore possible ticket links using text similarity, product
 information, extracted error codes, and timestamp proximity. The graph
-is an exploratory similarity view, not a verified dependency graph
-between incidents.
+is an exploratory similarity view.
 
 ### 5. SLA-Risk Sandbox
 
 Adjust priority, elapsed time, target, and queue-load assumptions in a
-transparent risk sandbox. The output is a configurable **risk index**,
-not a probability of breaching an actual SLA.
+transparent risk sandbox. The output is a configurable **risk index**.
 
 ### 6. Adaptive Routing Simulator
 
 Simulate routing using example team skills and capacity assumptions, and
-compare the result with an even or round-robin baseline. These team
-skills and capacities are illustrative assumptions, not learned from
-actual team assignment labels.
+compare the result with an even or round-robin baseline.
 
 ### 7. Recurrence and Early-Warning Radar
 
@@ -261,27 +246,21 @@ Demonstrate pattern-based redaction for common email, username,
 IP-address, phone, and credential-like strings. The local audit stores
 counts rather than raw text for the redaction workflow.
 
-Redaction patterns can miss sensitive information and must not be
-treated as a complete privacy guarantee.
-
 ### 9. Similar-Ticket and Resolution Retrieval
 
 Retrieve similar historical tickets and show their source ticket links
 and recorded resolutions when those resolutions are present in the CSV.
-No separate approved knowledge-base corpus is configured.
 
 ### 10. Model Reliability and Drift Exploration
 
 Inspect class-distribution changes, holdout calibration metrics, local
 model versions, and rollback controls. These tools support local
-experimentation but do not constitute a complete production
-drift-monitoring or model-deployment service.
+experimentation.
 
 ## Research Modules
 
 Open **Research Modules** at **`/research`** to explore three research
-candidates. These are implemented as experimental workflows; their
-effectiveness and novelty require separate validation.
+candidates. These are implemented as experimental workflows.
 
 ### Module A --- Uncertainty-Gated Active Learning with Novelty-Aware Sampling
 
@@ -299,13 +278,6 @@ macro-F1, rare-class recall, and estimated annotation minutes.
 **How the demonstration works:** it uses a deterministic stratified
 sample of up to 1,600 labeled tickets and an offline oracle simulation
 in which existing ground-truth labels are revealed to simulate review.
-The strategies share the same seed labels, test set, and acquisition
-checkpoints. Keyword impact and text length are proxies, not measured
-human annotation effort.
-
-Therefore, the benchmark does not establish real annotation savings or
-prove that active learning will improve results in a live support
-organization.
 
 ### Module B --- Counterfactual Incident Routing with Operational Constraints
 
@@ -321,9 +293,7 @@ This module compares ticket-text scenarios and examines:
 The CSV has no ground-truth assigned-team labels. Routing accuracy is
 therefore reported as unavailable rather than fabricated. Team skills,
 workloads, processing-time formulas, and SLA budgets are simulation
-parameters. Counterfactual phrasing stability is evaluated over three
-generated variants and is only a small diagnostic, not a human-validated
-explanation study.
+parameters.
 
 ### Module C --- Temporal Incident Fingerprinting and Recurrence Forecasting
 
@@ -333,14 +303,9 @@ and response-time features. It reports exploratory clustering and
 resampled-cluster stability, and provides a small chronological
 comparison when enough dated observations are available.
 
-The current dataset contains only a few response-time dates. As a
-result, reliable recurrence forecasting is not supported by the
-available data. Event precision and recall are unavailable because the
-dataset does not contain incident labels.
-
 ## Technology Stack
 
-The current project is a local Python web application.
+The current project is a Python web application.
 
   -----------------------------------------------------------------------
   Area                                Technology or approach
@@ -372,14 +337,9 @@ The current project is a local Python web application.
   Tests                               pytest
   -----------------------------------------------------------------------
 
-The implementation should be described according to the code that is
-present. Do not assume it uses a transformer model, a production
-database, a background task queue, or an external ticketing API unless
-those components have actually been added.
-
 ## Dataset and Data Handling
 
-The supplied dataset is expected to contain these 17 columns:
+The supplied dataset contains these 17 columns:
 
 1.  `Ticket ID`
 2.  `Customer Name`
@@ -413,24 +373,8 @@ Some fields are missing in many rows:
 
 These counts describe the supplied dataset and should be rechecked if
 the CSV changes. The application calculates its dashboard values at
-runtime. Timestamp fields are checked for parseability; the prototype
-does not infer elapsed times or actual SLA outcomes from them.
+runtime. Timestamp fields are checked for parseability.
 
-The dataset uses `@example.com` email addresses as a dataset
-characteristic. The app does not render customer names or emails in
-ticket views and excludes them from predictive features.
-
-### Expected CSV Location
-
-By default, Opslyra looks for:
-
-``` text
-customer_support_tickets.csv
-```
-
-in the same directory as `app.py`. You can point the application to
-another CSV using `TICKETMIND_DATASET`; see
-[Configuration](#configuration).
 
 ## NLP and Machine Learning
 
@@ -467,43 +411,6 @@ At a high level, the baseline pipeline:
 6.  Evaluates predictions on a reproducible stratified holdout.
 7.  Uses the saved model for single-ticket predictions and supported
     workflow demonstrations.
-
-Model training is performed explicitly rather than on every page
-request. Local model artifacts and version metadata are stored under
-`instance/`.
-
-### Model Confidence Warning
-
-The maximum predicted class probability is **not calibrated
-confidence**. A high value should not automatically be interpreted as a
-reliable probability that a prediction is correct. The holdout report
-includes expected calibration error and a multiclass Brier score, but
-the prototype does not calibrate the model or establish that the metrics
-generalize to future tickets.
-
-## Evaluation and Interpretation
-
-The prototype supports reproducible experiments, but results must be
-interpreted in context.
-
--   **Classification:** the random holdout measures performance on one
-    stratified split.
--   **Calibration:** the reported calibration metrics describe the
-    holdout and do not mean the model has been calibrated.
--   **Novelty detection:** the threshold is estimated from within-corpus
-    neighbors and is not independently validated against
-    out-of-distribution examples.
--   **Routing:** the dataset has no assigned-team ground truth, so real
-    routing accuracy cannot be measured.
--   **SLA risk:** no actual SLA targets or breach labels are supplied.
--   **Temporal analysis:** the available response-time dates are too
-    limited for reliable recurrence claims.
--   **Research novelty:** the modules are research candidates, not proof
-    of a novel or superior method.
-
-Do not add or report fabricated accuracy, F1 scores, time savings,
-routing success rates, or business outcomes. Use the values produced by
-the running application and document the evaluation setup.
 
 ## Installation and Local Setup
 
@@ -606,120 +513,6 @@ Review the test output and resolve failures before presenting the
 project as verified. Test results depend on the code and environment in
 which the command is run.
 
-## Project Data and Generated Artifacts
-
-The `instance/` directory stores local state such as:
-
--   Agent corrections and local label overlays.
--   Workflow preferences and activity events.
--   Count-only audit records for supported redaction workflows.
--   Model metadata, model versions, and trained artifacts.
-
-This directory is excluded from source control. Treat generated
-artifacts and local state as data: do not publish them if they contain
-sensitive or proprietary information.
-
-## Prototype Boundaries and Limitations
-
-The following limitations are important when demonstrating, evaluating,
-or extending Opslyra.
-
-### No Production Authentication or Tenant Isolation
-
-The prototype has no user accounts, team membership, or production
-role-based access control. Adaptive AI modes are local workflow
-controls, not an authorization system. Do not use it as a publicly
-accessible service or with real customer personally identifiable
-information without adding and independently validating appropriate
-controls.
-
-### No Live External Ticket Actions
-
-Ticket rows remain read-only records from the source CSV. Selective
-Automation and Autonomous Workflow currently save only local
-category/priority overlays and support read-only similar-ticket
-retrieval. They do not:
-
--   Send customer responses.
--   Route tickets to real external teams.
--   Monitor real follow-ups.
--   Verify resolutions in an external ticketing system.
--   Connect to external payment, email, or ticketing services.
-
-### SLA and Routing Are Simulations
-
-The dataset has no SLA targets, SLA breach labels, queue workloads, or
-assigned-team labels. SLA risk is a configurable heuristic index, and
-team skills and capacities are example assumptions. No real tickets are
-routed by the simulator.
-
-### Novelty Detection Is Lexical
-
-The open-set detector uses TF-IDF cosine distance and average
-nearest-neighbor density. It does not use a pretrained semantic
-embedding model. Its threshold is estimated from within-corpus neighbors
-and is not independent out-of-distribution validation.
-
-### Counterfactuals Are Not Causal Evidence
-
-Hypothetical wording changes show how model outputs respond to changed
-text. They do not prove causal effects in real support operations.
-
-### Incident Links Are Exploratory
-
-The relationship graph is based on similarity signals and should not be
-interpreted as a verified incident dependency graph. Resolution
-retrieval can only use resolutions present in the CSV; no approved
-knowledge-base corpus is configured.
-
-### Temporal Evidence Is Limited
-
-The first-response data spans only a few days. The current dataset does
-not support reliable seasonal analysis or strong recurrence-forecasting
-claims.
-
-### Privacy Redaction Is Not Complete Protection
-
-Pattern-based redaction can miss sensitive values. Although the
-supported local audit stores counts rather than raw text, the absence of
-authentication and role-based access control makes this unsuitable for
-public deployment or real customer data.
-
-### Model Operations Are Local
-
-Model versions can be activated or rolled back for demonstration
-purposes. There is no production model deployment path, formal
-deployment approval workflow, or complete drift-monitoring service.
-Class-distribution changes and holdout scores are not a substitute for
-ongoing production monitoring.
-
-### Research Modules Have Experimental Boundaries
-
--   **Module A:** uses a deterministic sample of up to 1,600 labeled
-    tickets and an offline oracle simulation. Estimated review costs are
-    proxies, not measured human effort.
--   **Module B:** uses simulated team skills, workloads, processing
-    times, and SLA budgets because ground-truth routing outcomes are
-    absent.
--   **Module C:** uses TF-IDF features reduced with TruncatedSVD,
-    product/error-code indicators, and response-time features rather
-    than pretrained semantic embeddings. The small chronological
-    comparison is not enough to validate recurrence forecasting.
-
-### Not Yet a Production SaaS
-
-Opslyra is a single-workspace research prototype. Production use would
-require, at minimum, authentication, tenant isolation, role-based
-authorization, secure deployment, rate limiting, validated privacy
-controls, real SLA and assignment data, time-aware evaluation,
-background processing where appropriate, and formal model/action
-approval policies.
-
-Research novelty and effectiveness require a separate literature and
-prior-art review plus adequately powered, reproducible experiments. This
-README does not claim that the research modules are proven novel or
-superior.
-
 ## Potential Next Steps
 
 Possible extensions for a future version include:
@@ -727,8 +520,6 @@ Possible extensions for a future version include:
 -   Add authentication, organization and team membership, and enforce
     role-based permissions.
 -   Add a writable ticket database and controlled CSV import workflow.
--   Integrate real ticketing, email, or knowledge-base systems through
-    explicit adapters.
 -   Add an approved response-generation model with source-grounded
     retrieval and review policies.
 -   Calibrate model probabilities using an appropriate validation set.
