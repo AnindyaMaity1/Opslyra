@@ -751,5 +751,4 @@ present.
 ------------------------------------------------------------------------
 
 **Opslyra --- From Every Ticket to Intelligent Action.**
-#   O p s l y r a - - - Y o u r - n e x t - t i c k e t - t o - a c t - o n - a t - a - g l a n c e  
- 
+#
