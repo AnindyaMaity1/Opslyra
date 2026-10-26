@@ -73,9 +73,6 @@ including:
 -   Short, rule-based next-step prompts.
 -   Counts and summaries calculated from the loaded CSV.
 
-The queue guidance is a rule-based review aid. It is **not** a live SLA
-prediction.
-
 ### 2. Searchable Ticket Explorer
 
 The ticket explorer supports searching, filtering, pagination, and a
