@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Research modules{% endblock %}
+{% block breadcrumb %}Research modules{% endblock %}
+{% block content %}
+<section class="page-heading compact-heading">
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> PROJECT DIFFERENTIATORS</div><h1>Research modules</h1><p class="subtitle">Three reproducible research candidates with interactive samplers, constrained simulations, and temporal comparisons.</p></div>
+  <span class="prototype-tag"><span class="status-dot"></span> Research prototype · methods are not novelty claims</span>
+</section>
+<div class="notice-box research-boundary"><strong>Dataset fit:</strong> {{ "{:,}".format(profile.row_count) }} tickets, {{ temporal.days_observed }} observed ticket-response dates. Available labels support a ticket-type active-learning simulation, but there are no assigned-team labels or incident/event ground truth. Temporal scores and routing outcomes are therefore limited or explicitly unavailable.</div>
+
+<article class="panel research-panel" id="differentiator-a">
+  <div class="research-title"><span class="feature-number">A</span><div><div class="eyebrow">UNCERTAINTY-GATED ACTIVE LEARNING</div><h2>Novelty-aware annotation queue</h2><p>Rank tickets using predictive uncertainty, novelty, text-based impact, diversity, and estimated annotation effort.</p></div></div>
+  <div class="research-columns">
+    <section>
+      <h3>Live review queue</h3>
+      <form class="research-form" method="post">
+        <input type="hidden" name="action" value="queue">
+        <label>Uncertainty <input type="number" name="uncertainty" min="0" max="1" step="0.05" value="{{ "%.2f"|format(queue_weights.uncertainty) }}"></label>
+        <label>Novelty <input type="number" name="novelty" min="0" max="1" step="0.05" value="{{ "%.2f"|format(queue_weights.novelty) }}"></label>
+        <label>Impact <input type="number" name="impact" min="0" max="1" step="0.05" value="{{ "%.2f"|format(queue_weights.impact) }}"></label>
+        <label>Diversity <input type="number" name="diversity" min="0" max="1" step="0.05" value="{{ "%.2f"|format(queue_weights.diversity) }}"></label>
+        <button class="button button-primary" type="submit">Re-rank review queue</button>
+      </form>
+      <div class="queue-list">
+        {% for item in queue %}
+        <div class="queue-item">
+          <a href="{{ url_for('ticket_detail', ticket_id=item.ticket_id) }}"><strong>#{{ item.ticket_id }} · {{ item.subject or "Untitled ticket" }}</strong></a>
+          <span>Predicted {{ item.predicted_type }} · {{ "%.1f"|format(item.estimated_annotation_minutes) }} min estimate</span>
+          <div class="queue-signals"><span>Uncertainty {{ "%.2f"|format(item.uncertainty) }}</span><span>Novelty {{ "%.2f"|format(item.novelty) }}</span><span>Impact {{ "%.2f"|format(item.impact) }}</span><b>Rank {{ "%.3f"|format(item.score) }}</b></div>
+          <small>{{ item.reasons|join(" · ") if item.reasons else "Combined weighted rank" }}</small>
+        </div>
+        {% else %}<p class="empty-inline">Train a ticket-type baseline with sufficient labels to populate the acquisition queue.</p>{% endfor %}
+      </div>
+      <p class="method-note">Impact is a text-keyword proxy; annotation cost is estimated from text length. They are not measured operational outcomes.</p>
+    </section>
+    <section>
+      <h3>Equal-budget research test</h3>
+      <p class="research-description">Run an offline oracle simulation on labeled ticket types using one fixed stratified test set and identical acquisition budgets.</p>
+      <form class="inline-form" method="post">
+        <input type="hidden" name="action" value="benchmark">
+        <label>Additional labels per policy<input type="number" name="budget" min="4" max="120" value="40"></label>
+        <button class="button button-secondary" type="submit">Compare 4 policies</button>
+      </form>
+      {% if active_learning %}
+      <div class="result-banner result-positive"><strong>Fixed holdout benchmark · seed {{ active_learning.seed }}</strong><span>{{ active_learning.rows_used }} sampled rows · {{ active_learning.test_rows }} shared test tickets · rare label: {{ active_learning.rare_class }}</span><small>{{ active_learning.metric_warning }}</small></div>
+      <div class="research-table-wrap">
+        <table class="research-table">
+          <thead><tr><th>Policy</th><th>Labels added</th><th>Est. effort</th><th>Macro-F1</th><th>Rare recall</th></tr></thead>
+          <tbody>
+          {% for key, label in active_learning.policies.items() %}
+            {% for point in active_learning.curves[key] %}
+            <tr><td>{{ label }}{% if loop.first %}<span class="research-small">budget step</span>{% endif %}</td><td>{{ point.budget }}</td><td>{{ "%.1f"|format(point.annotation_minutes) }} min</td><td>{{ "%.3f"|format(point.macro_f1) }}</td><td>{{ "%.3f"|format(point.rare_class_recall) }}</td></tr>
+            {% endfor %}
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="method-note">The benchmark samples up to 1,600 labeled records for responsive interaction. Each policy starts from the same seed labels and reveals the same number of labels at each budget checkpoint.</p>{% endif %}
+    </section>
+  </div>
+</article>
+
+<article class="panel research-panel" id="differentiator-b">
+  <div class="research-title"><span class="feature-number">B</span><div><div class="eyebrow">COUNTERFACTUAL INCIDENT ROUTING</div><h2>Operational-constraint simulator</h2><p>Separate text-model recommendations from configured team policy, workload, capacity, and simulated SLA feasibility.</p></div></div>
+  <form class="routing-study-form" method="post">
+    <input type="hidden" name="action" value="routing-study">
+    <div class="routing-text">
+      <label>Ticket subject<input name="subject" maxlength="500" required placeholder="e.g. Production checkout outage"></label>
+      <label>Ticket description<textarea name="description" rows="3" maxlength="10000" placeholder="Who or what is affected? Include evidence and error codes."></textarea></label>
+    </div>
+    <div class="constraint-inputs">
+      {% for index, team in [(0, "Technical Support"), (1, "Billing & Payments"), (2, "Retention")] %}
+      <fieldset><legend>{{ team }}</legend>
+        <label>Queue workload<input type="number" name="workload_{{ index }}" min="0" value="{{ [30,25,18][index] }}"></label>
+        <label>Capacity<input type="number" name="capacity_{{ index }}" min="1" value="{{ [80,70,50][index] }}"></label>
+      </fieldset>
+      {% endfor %}
+      <label class="sla-budget">Remaining SLA budget (hours)<input type="number" name="remaining_sla_hours" min="0.5" step="0.5" value="8"></label>
+    </div>
+    <button class="button button-primary" type="submit">Compare constrained routes</button>
+  </form>
+  {% if routing_study %}
+  <div class="routing-metrics">
+    <div><span>Explanation stability</span><strong>{{ "%.0f"|format(routing_study.explanation_stability * 100) }}%</strong><small>Across 3 generated outage paraphrases</small></div>
+    <div><span>Constraint-valid routes</span><strong>{{ "%.0f"|format(routing_study.validity_rate * 100) }}%</strong><small>Skill, capacity, and SLA simulation</small></div>
+    <div><span>Simulated SLA feasibility</span><strong>{{ "%.0f"|format(routing_study.simulated_sla_feasibility * 100) }}%</strong><small>Based on configured workload model</small></div>
+    <div><span>Routing accuracy</span><strong>N/A</strong><small>No assigned-team ground truth</small></div>
+  </div>
+  <div class="route-scenario-grid">
+    {% for item in routing_study.scenarios %}
+    <article class="route-scenario"><h3>{{ item.name }}</h3><p>{{ item.note }}</p>
+      {% for target, prediction in item.predictions.items() %}<span class="route-model-output">Model {{ target }}: <strong>{{ prediction.label }}</strong> · {{ "%.0f"|format(prediction.score * 100) }}%</span>{% endfor %}
+      <div class="route-policy-output"><span>Policy baseline</span><strong>{{ item.routing.baseline_team or "No skill match" }}</strong></div>
+      <div class="route-policy-output"><span>Capacity/SLA constrained</span><strong>{{ item.routing.constrained_team or "No feasible team" }}</strong></div>
+      <small>{% if item.routing.projected_hours is not none %}Projected {{ "%.1f"|format(item.routing.projected_hours) }}h vs {{ item.routing.sla_budget_hours }}h remaining{% else %}No eligible team has available capacity{% endif %}</small>
+    </article>
+    {% endfor %}
+  </div>
+  <p class="method-note">{{ routing_study.constraint_note }} {{ routing_study.accuracy_note }} Model text changes are hypothetical and are not causal evidence.</p>
+  {% else %}<p class="method-note">Routing policy is learned only after enough human-reviewed team labels exist. The capability map, capacity limits, SLA budgets, and processing-time estimates in this simulator are explicit demo settings, not ground truth.</p>{% endif %}
+</article>
+
+<article class="panel research-panel" id="differentiator-c">
+  <div class="research-title"><span class="feature-number">C</span><div><div class="eyebrow">TEMPORAL INCIDENT FINGERPRINTING</div><h2>Evolving fingerprints &amp; recurrence evaluation</h2><p>Combine ticket language, product identifiers, extracted error codes, and ticket response timestamps; compare with text-only TF–IDF clusters.</p></div></div>
+  <div class="result-banner {% if temporal.days_observed < 7 %}result-warning{% else %}result-positive{% endif %}"><strong>{{ temporal.message }}</strong><span>{{ temporal.dated_tickets }} dated tickets · {{ temporal.days_observed }} observed days{% if temporal.status != "ready" %} · {{ temporal.status }}{% endif %}</span></div>
+  {% if temporal.status == "ready" %}
+  <div class="research-table-wrap">
+    <table class="research-table">
+      <thead><tr><th>Fingerprint method</th><th>Cosine silhouette</th><th>Bootstrap stability ARI</th></tr></thead>
+      <tbody>{% for item in temporal.comparison %}<tr><td>{{ item.name }}</td><td>{% if item.silhouette is not none %}{{ "%.3f"|format(item.silhouette) }}{% else %}N/A{% endif %}</td><td>{% if item.bootstrap_stability_ari is not none %}{{ "%.3f"|format(item.bootstrap_stability_ari) }}{% else %}N/A{% endif %}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  <div class="fingerprint-grid">
+    {% for item in temporal.fingerprints %}
+    <article class="fingerprint-card"><div><span>FP-{{ "%02d"|format(item.cluster + 1) }}</span><strong>{{ item.count }} tickets</strong></div><p>{{ item.terms|join(" · ") }} · {{ item.product }}{% if item.error_codes %} · {{ item.error_codes|join(", ") }}{% else %} · no extracted error code{% endif %}</p><small>{{ item.start }} → {{ item.end }}</small><small>Ticket references: {% for ticket_id in item.sample_ids %}<a href="{{ url_for('ticket_detail', ticket_id=ticket_id) }}">#{{ ticket_id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</small></article>
+    {% endfor %}
+  </div>
+  {% if temporal.forecast %}
+  <div class="forecast-row"><strong>One-step chronological holdout · {{ temporal.forecast.held_out_date }}</strong><span>Observed {{ temporal.forecast.actual }}</span><span>Persistence MAE {{ "%.2f"|format(temporal.forecast.persistence_absolute_error) }}</span><span>Expanding-mean MAE {{ "%.2f"|format(temporal.forecast.historical_mean_absolute_error) }}</span></div>
+  {% if temporal.recurrence_forecasts %}<div class="research-table-wrap"><table class="research-table"><thead><tr><th>Fingerprint recurrence</th><th>Observed latest day</th><th>Persistence MAE</th><th>Historical mean MAE</th></tr></thead><tbody>{% for item in temporal.recurrence_forecasts %}<tr><td>FP-{{ "%02d"|format(item.cluster + 1) }}</td><td>{{ item.observed }} tickets</td><td>{{ "%.2f"|format(item.persistence_absolute_error) }}</td><td>{{ "%.2f"|format(item.historical_mean_absolute_error) }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+  {% else %}<p class="method-note">Recurrence forecasting is withheld: fewer than four distinct response dates cannot provide even a minimal chronological holdout. Seasonality and forecast quality are not inferable here.</p>{% endif %}
+  <p class="method-note">{{ temporal.event_note }} Cluster stability and silhouette are unsupervised diagnostics, not event-detection precision or recall.</p>
+  {% else %}<p class="empty-inline">{{ temporal.message }}</p>{% endif %}
+</article>
+{% endblock %}

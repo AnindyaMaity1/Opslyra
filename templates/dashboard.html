@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block breadcrumb %}Overview{% endblock %}
+{% block content %}
+<section class="overview-hero">
+  <div class="overview-hero-copy">
+    <div class="overview-kicker"><span class="overview-kicker-dot"></span> FROM EVERY TICKET TO INTELLIGENT ACTION</div>
+    <h1>Your next ticket to act on, at a glance.</h1>
+    <p>Start with open high-priority work, then use the ticket context to decide the right next step.</p>
+    <div class="overview-hero-actions">
+      <a class="button overview-button-light" href="{{ url_for('tickets', status='Open') }}">Open triage queue <span aria-hidden="true">→</span></a>
+      <a class="overview-hero-link" href="{{ url_for('predict') }}">Try a ticket prediction <span aria-hidden="true">↗</span></a>
+    </div>
+  </div>
+  <div class="overview-focus-card">
+    <div class="overview-focus-top"><span>OPEN · HIGH PRIORITY</span><span class="overview-focus-icon" aria-hidden="true">✳</span></div>
+    <div class="overview-focus-count">{{ "{:,}".format(urgent_open_count) }}</div>
+    <p>Critical and High tickets to review</p>
+    <div class="overview-focus-track"><span style="width: {{ active_percent }}%"></span></div>
+    <div class="overview-focus-foot"><span>{{ "{:,}".format(active_count) }} active in this dataset</span><span>{{ active_percent }}%</span></div>
+  </div>
+</section>
+
+<section class="overview-metrics" aria-label="Support desk snapshot">
+  <article class="overview-metric">
+    <div class="overview-metric-head"><span>Open tickets</span><span class="overview-metric-icon metric-blue">↗</span></div>
+    <strong>{{ "{:,}".format(open_count) }}</strong>
+    <small>Currently marked Open</small>
+  </article>
+  <article class="overview-metric">
+    <div class="overview-metric-head"><span>Priority review</span><span class="overview-metric-icon metric-red">!</span></div>
+    <strong>{{ "{:,}".format(urgent_open_count) }}</strong>
+    <small>Critical or High · Open status</small>
+  </article>
+  <article class="overview-metric">
+    <div class="overview-metric-head"><span>Awaiting customer</span><span class="overview-metric-icon metric-amber">◷</span></div>
+    <strong>{{ "{:,}".format(waiting_count) }}</strong>
+    <small>Marked Pending Customer Response</small>
+  </article>
+  <article class="overview-metric">
+    <div class="overview-metric-head"><span>Customer satisfaction</span><span class="overview-metric-icon metric-green">★</span></div>
+    <strong>{% if profile.average_satisfaction is not none %}{{ "%.1f"|format(profile.average_satisfaction) }}<span class="overview-metric-suffix">/ 5</span>{% else %}<span class="overview-na">N/A</span>{% endif %}</strong>
+    <small>Average of available ratings</small>
+  </article>
+</section>
+
+<section class="overview-main-grid">
+  <article class="panel overview-attention-panel">
+    <div class="overview-section-head">
+      <div>
+        <div class="overview-section-kicker">START HERE</div>
+        <h2>Priority review queue</h2>
+        <p>Open Critical and High tickets, sorted by recorded priority.</p>
+      </div>
+      <a class="text-link" href="{{ url_for('tickets', status='Open') }}">View open tickets <span aria-hidden="true">→</span></a>
+    </div>
+    {% if attention_tickets %}
+    <div class="overview-ticket-list">
+      {% for ticket in attention_tickets %}
+      <article class="overview-ticket-row">
+        <span class="overview-priority priority-{{ ticket.priority|lower }}">{{ ticket.priority }}</span>
+        <div class="overview-ticket-main">
+          <a class="overview-ticket-title" href="{{ url_for('ticket_detail', ticket_id=ticket.id) }}">{{ ticket.subject }}</a>
+          <div class="overview-ticket-meta">
+            <span>#{{ ticket.id }}</span><i></i><span>{{ ticket.ticket_type }}</span><i></i><span>{{ ticket.channel }}</span>
+          </div>
+          <p class="overview-next-step"><span aria-hidden="true">↳</span> {{ ticket.next_step }}</p>
+        </div>
+        <a class="overview-ticket-open" href="{{ url_for('ticket_detail', ticket_id=ticket.id) }}" aria-label="Open ticket {{ ticket.id }}">↗</a>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="overview-empty">
+      <span aria-hidden="true">✓</span>
+      <div><strong>No open Critical or High tickets in this snapshot</strong><p>Check the full queue for other work that may need attention.</p></div>
+      <a class="text-link" href="{{ url_for('tickets', status='Open') }}">Browse queue →</a>
+    </div>
+    {% endif %}
+    <div class="overview-boundary-note"><span aria-hidden="true">ⓘ</span> Guidance is based on the recorded status and priority—not live SLA data or your internal escalation policy.</div>
+  </article>
+
+  <article class="panel overview-distribution-panel">
+    <div class="overview-section-head">
+      <div><div class="overview-section-kicker">WHAT'S COMING IN</div><h2>Issue categories</h2><p>Ticket types in the full dataset</p></div>
+      <a class="text-link" href="{{ url_for('tickets') }}">Browse <span aria-hidden="true">→</span></a>
+    </div>
+    <div class="overview-category-list">
+      {% for item in profile.targets["Ticket Type"] %}
+      {% set share = (item.count / profile.row_count * 100)|round(1) %}
+      <article class="overview-category-card category-card-{{ loop.index }}">
+        <span class="overview-category-orbit" style="--share: {{ share }}%" role="img" aria-label="{{ share }} percent of tickets">
+          <span class="overview-category-orbit-label">{{ "%.0f"|format(share) }}%</span>
+        </span>
+        <div class="overview-category-copy">
+          <strong>{{ item.label }}</strong>
+          <span class="overview-category-count">{{ "{:,}".format(item.count) }} tickets</span>
+        </div>
+      </article>
+      {% else %}
+      <div class="empty-state">No ticket categories are available.</div>
+      {% endfor %}
+    </div>
+    <a class="overview-inline-link" href="{{ url_for('intelligence_page') }}">Explore related incidents <span aria-hidden="true">→</span></a>
+  </article>
+</section>
+
+<section class="overview-lower-grid">
+  <article class="panel overview-breakdown-panel">
+    <div class="overview-section-head">
+      <div><div class="overview-section-kicker">QUEUE COMPOSITION</div><h2>Priority mix</h2><p>Recorded priority across all tickets</p></div>
+      <span class="overview-mini-icon metric-red">!</span>
+    </div>
+    <div class="overview-priority-list">
+      {% for item in profile.targets["Ticket Priority"] %}
+      {% set share = (item.count / profile.row_count * 100)|round(1) %}
+      <article class="overview-priority-card priority-card-{{ item.label|lower|replace(' ', '-') }}">
+        <div class="overview-priority-card-top"><span class="overview-priority-glyph" aria-hidden="true">{% if item.label|lower == "critical" %}!!{% elif item.label|lower == "high" %}↑{% elif item.label|lower == "medium" %}·{% else %}↓{% endif %}</span><span>{{ "%.1f"|format(share) }}%</span></div>
+        <strong>{{ "{:,}".format(item.count) }}</strong>
+        <span class="overview-priority-name">{{ item.label }}</span>
+      </article>
+      {% else %}
+      <div class="empty-state">No priority labels are available.</div>
+      {% endfor %}
+    </div>
+  </article>
+  <article class="panel overview-breakdown-panel">
+    <div class="overview-section-head">
+      <div><div class="overview-section-kicker">WORKFLOW</div><h2>Status breakdown</h2><p>What the dataset says about ticket state</p></div>
+      <span class="overview-mini-icon metric-blue">◷</span>
+    </div>
+    <div class="overview-status-list">
+      {% for item in profile.targets["Ticket Status"] %}
+      {% set share = (item.count / profile.row_count * 100)|round(1) %}
+      <article class="overview-status-card status-card-{{ item.label|lower|replace(' ', '-') }}">
+        <div class="overview-status-ring" style="--share: {{ share }}%" role="img" aria-label="{{ item.label }}: {{ item.count }} tickets, {{ share }} percent">
+          <span>{{ "{:,}".format(item.count) }}</span>
+        </div>
+        <div class="overview-status-copy"><strong>{{ item.label }}</strong><span>{{ "%.1f"|format(share) }}% of tickets</span></div>
+      </article>
+      {% else %}
+      <div class="empty-state">No ticket statuses are available.</div>
+      {% endfor %}
+    </div>
+  </article>
+  <article class="panel overview-quality-panel">
+    <div class="overview-section-head">
+      <div><div class="overview-section-kicker">DATA CONFIDENCE</div><h2>Dataset health</h2><p>Know what the snapshot can support</p></div>
+      <span class="overview-mini-icon metric-green">✓</span>
+    </div>
+    <div class="overview-quality-list">
+      <div><span>Tickets loaded</span><strong>{{ "{:,}".format(profile.row_count) }}</strong></div>
+      <div><span>Required columns</span><strong>{{ profile.column_count }} / 17</strong></div>
+      <div><span>Duplicate ticket IDs</span><strong class="{% if profile.duplicate_ticket_ids %}text-warning{% else %}text-success{% endif %}">{{ profile.duplicate_ticket_ids }}</strong></div>
+      <div><span>Blank cells</span><strong>{{ "{:,}".format(profile.missing_total) }}</strong></div>
+    </div>
+    <a class="overview-inline-link" href="{{ url_for('data_quality') }}">Review data quality <span aria-hidden="true">→</span></a>
+  </article>
+</section>
+<p class="overview-data-note">Snapshot from the connected CSV · Queue labels are descriptive and are not live workload or SLA measurements.</p>
+{% endblock %}

@@ -1,0 +1,87 @@
+OPSLYRA - WINDOWS QUICK START
+=============================
+
+Requirements
+------------
+- Windows 10 or newer
+- Python 3.10 or newer available as the "py" launcher
+- The Opslyra project files and customer_support_tickets.csv
+
+Start the app
+-------------
+1. Open PowerShell.
+2. Go to the project folder:
+
+   Set-Location -Path "D:\TicketMind"
+
+3. Create a virtual environment (skip if .venv already exists):
+
+   py -3 -m venv .venv
+
+4. Activate it:
+
+   .\.venv\Scripts\Activate.ps1
+
+   If PowerShell blocks activation for this terminal, use:
+
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+   .\.venv\Scripts\Activate.ps1
+
+5. Install the project dependencies:
+
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
+
+6. Set a session secret for this PowerShell window:
+
+   $env:OPSLYRA_SECRET_KEY = python -c "import secrets; print(secrets.token_hex(32))"
+
+   For a persistent local secret, keep and reuse the same value in later
+   PowerShell sessions. Do not commit the secret to source control.
+
+7. Start Opslyra:
+
+   python app.py
+
+8. Open this address in your browser:
+
+   http://127.0.0.1:5000
+
+Stop the app with Ctrl+C in PowerShell.
+
+Use a different ticket CSV
+--------------------------
+The default dataset is customer_support_tickets.csv beside app.py. To use
+another CSV, set its path before starting the app:
+
+   $env:TICKETMIND_DATASET = "C:\path\to\your_tickets.csv"
+   python app.py
+
+The CSV must contain the 17 columns required by Opslyra. See README.md for
+the schema, privacy notes, and dataset limitations.
+
+Run the tests
+-------------
+With the virtual environment activated:
+
+   python -m pytest -q
+
+Adaptive AI demo
+----------------
+- Use the workspace mode selector in the top navigation or open
+  http://127.0.0.1:5000/adaptive-ai.
+- Open a ticket and choose its AI mode in the Adaptive AI section.
+- In AI Copilot mode, run the workflow, then approve, edit, or reject the
+  proposed ticket labels.
+- Try Human Takeover to pause new AI workflows for that ticket.
+
+Important limitations
+---------------------
+Opslyra is a local research/demo prototype, not a production ticketing
+service. Its source CSV is read-only; accepted category and priority
+changes are local SQLite overlays. It has no user accounts or role-based
+access control and does not send customer replies or update external
+ticket systems. Model scores are uncalibrated and must not be treated as
+probabilities or production authorization. Do not expose the development
+server publicly or use real customer data without adding and validating
+appropriate security controls.

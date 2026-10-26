@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Model evaluation{% endblock %}
+{% block breadcrumb %}Model evaluation{% endblock %}
+{% block content %}
+<section class="page-heading compact-heading">
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> MACHINE LEARNING</div><h1>Baseline evaluation</h1><p class="subtitle">TF–IDF and logistic regression using ticket subject and description only.</p></div>
+  <form method="post"><button class="button button-primary" type="submit">↻ Train baseline</button></form>
+</section>
+<div class="notice-box model-notice"><strong>Research baseline, not a deployed model.</strong> Each result uses a reproducible 75/25 stratified random split (seed 42). Scores are not calibrated; this random split is not a substitute for chronological validation.</div>
+{% if reports %}
+<section class="model-grid">
+  {% for target, report in reports.items() %}
+  <article class="panel model-card">
+    <div class="panel-heading"><div><h2>{{ target }}</h2><p>{{ "{:,}".format(report.training_rows) }} train · {{ "{:,}".format(report.test_rows) }} held-out test rows</p></div><span class="model-badge">TF-IDF</span></div>
+    {% if report.accuracy is not none %}
+    <div class="model-metrics">
+      <div><span>Accuracy</span><strong>{{ "%.1f"|format(report.accuracy * 100) }}<small>%</small></strong></div>
+      <div><span>Macro F1</span><strong>{{ "%.1f"|format(report.macro_f1 * 100) }}<small>%</small></strong></div>
+      <div><span>Weighted F1</span><strong>{{ "%.1f"|format(report.weighted_f1 * 100) }}<small>%</small></strong></div>
+    </div>
+    <div class="calibration-note">Holdout only · ECE {{ "%.3f"|format(report.expected_calibration_error) }} · multiclass Brier {{ "%.3f"|format(report.multiclass_brier_score) }}</div>
+    {% else %}
+    <div class="notice-box">This team model has only reviewed correction examples and no independent team ground truth; predictive performance is not reported.</div>
+    {% endif %}
+    <div class="class-report">
+      {% for label, scores in report.classes.items() if label not in ["accuracy", "macro avg", "weighted avg"] %}
+      <div><span>{{ label }}</span><span>Precision {{ "%.2f"|format(scores.precision) }}</span><strong>Recall {{ "%.2f"|format(scores.recall) }}</strong></div>
+      {% endfor %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% elif trained %}
+<div class="panel empty-state empty-large"><strong>No trainable target labels</strong><span>The selected targets need at least two classes with two examples per class.</span></div>
+{% else %}
+<div class="panel empty-state empty-large"><span class="empty-icon">✳</span><strong>Train the first baseline</strong><span>Opslyra will train independent classifiers for ticket type and priority from available labels.</span><form method="post"><button class="button button-primary" type="submit">Train models</button></form></div>
+{% endif %}
+{% endblock %}

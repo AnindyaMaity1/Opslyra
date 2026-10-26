@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <meta name="adaptive-csrf-token" content="{{ adaptive_csrf_token }}">
+  <title>{% block title %}Opslyra{% endblock %} · Opslyra</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="{{ url_for('dashboard') }}" aria-label="Opslyra home">
+        <span class="brand-mark" aria-hidden="true">O</span>
+        <span class="brand-copy"><strong>Opslyra</strong><small>IT SERVICE INTELLIGENCE</small></span>
+      </a>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="nav-list" aria-label="Main navigation">
+        <a class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span class="nav-icon">⌂</span> Overview</a>
+        <a class="nav-item {% if request.endpoint in ['tickets', 'ticket_detail'] %}active{% endif %}" href="{{ url_for('tickets') }}"><span class="nav-icon">▤</span> Tickets <span class="nav-count">{{ profile.row_count if profile is defined else '' }}</span></a>
+        <a class="nav-item {% if request.endpoint == 'predict' %}active{% endif %}" href="{{ url_for('predict') }}"><span class="nav-icon">✳</span> AI prediction</a>
+        <a class="nav-item {% if request.endpoint == 'models_page' %}active{% endif %}" href="{{ url_for('models_page') }}"><span class="nav-icon">⌁</span> Model evaluation</a>
+        <a class="nav-item {% if request.endpoint == 'intelligence_page' %}active{% endif %}" href="{{ url_for('intelligence_page') }}"><span class="nav-icon">◉</span> Incident lab</a>
+        <a class="nav-item {% if request.endpoint == 'adaptive_ai_page' %}active{% endif %}" href="{{ url_for('adaptive_ai_page') }}"><span class="nav-icon">⌘</span> Adaptive AI</a>
+        <a class="nav-item {% if request.endpoint == 'research_page' %}active{% endif %}" href="{{ url_for('research_page') }}"><span class="nav-icon">⌘</span> Research modules</a>
+        <a class="nav-item {% if request.endpoint == 'data_quality' %}active{% endif %}" href="{{ url_for('data_quality') }}"><span class="nav-icon">◫</span> Data quality</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="prototype-card">
+          <span class="prototype-dot"></span>
+          <div><strong>Research prototype</strong><small>Local dataset workspace</small></div>
+        </div>
+        <div class="user-card">
+          <div class="avatar">O</div>
+          <div><strong>Local analyst</strong><small>Prototype workspace</small></div>
+          <span class="user-menu" aria-hidden="true">···</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-divider">/</span><strong>{% block breadcrumb %}Overview{% endblock %}</strong></div>
+        <div class="topbar-actions">
+          <span class="dataset-indicator"><span class="status-dot"></span> Dataset connected</span>
+          <span class="topbar-divider"></span>
+          <label class="workspace-mode-control">Workspace mode
+            <select id="workspace-ai-mode" aria-label="Workspace AI mode">
+              {% for mode in ["manual", "copilot", "selective", "autonomous"] %}
+                <option value="{{ mode }}" {% if workspace_ai_mode == mode %}selected{% endif %}>{{ ai_mode_details[mode].label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <a class="topbar-date" href="{{ url_for('adaptive_ai_page') }}">Opslyra</a>
+        </div>
+      </header>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-stack" role="status">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      <div class="page-content">
+        {% block content %}{% endblock %}
+      </div>
+      <footer class="page-footer"><span>Opslyra · From Every Ticket to Intelligent Action.</span><span>Metrics are computed from the configured dataset</span></footer>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='adaptive.js') }}" defer></script>
+</body>
+</html>

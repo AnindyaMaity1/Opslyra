@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Data quality{% endblock %}
+{% block breadcrumb %}Data quality{% endblock %}
+{% block content %}
+<section class="page-heading compact-heading">
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> DATASET INSPECTION</div><h1>Data quality</h1><p class="subtitle">A schema and completeness report computed from the configured CSV.</p></div>
+  <a class="button button-secondary" href="{{ url_for('tickets') }}">Browse tickets</a>
+</section>
+<section class="metric-grid quality-metrics">
+  <article class="metric-card"><div class="metric-top"><span class="metric-label">Rows inspected</span><span class="metric-icon icon-blue">▤</span></div><div class="metric-value">{{ "{:,}".format(profile.row_count) }}</div><div class="metric-foot"><span class="metric-note">{{ profile.column_count }} required columns present</span></div></article>
+  <article class="metric-card"><div class="metric-top"><span class="metric-label">Blank cells</span><span class="metric-icon icon-amber">◫</span></div><div class="metric-value">{{ "{:,}".format(profile.missing_total) }}</div><div class="metric-foot"><span class="metric-note">Across the required schema</span></div></article>
+  <article class="metric-card"><div class="metric-top"><span class="metric-label">Duplicate ticket IDs</span><span class="metric-icon icon-green">⎘</span></div><div class="metric-value">{{ profile.duplicate_ticket_ids }}</div><div class="metric-foot"><span class="metric-note">Exact duplicate identifier count</span></div></article>
+</section>
+<section class="dashboard-grid quality-grid">
+  <article class="panel">
+    <div class="panel-heading"><div><h2>Schema and numeric checks</h2><p>Observed column types and basic validation</p></div><span class="panel-chip">SCHEMA</span></div>
+    <div class="quality-field-list">
+      {% for field, data_type in profile.data_types.items() %}
+      <div class="quality-field"><span>{{ field }}</span><strong>{{ data_type }}</strong><span class="quality-percent">dtype</span></div>
+      {% endfor %}
+    </div>
+    {% for field, result in profile.numeric_checks.items() %}
+    <div class="quality-field"><span>{{ field }} · parseable</span><strong>{{ "{:,}".format(result.parseable) }}</strong><span class="quality-percent {% if result.invalid %}text-warning{% endif %}">{{ result.invalid }} invalid</span></div>
+    {% endfor %}
+  </article>
+  <article class="panel">
+    <div class="panel-heading"><div><h2>Missing values by field</h2><p>Blank strings and null values are counted as missing</p></div><span class="panel-chip">MISSING</span></div>
+    {% if profile.missing_values %}
+    <div class="quality-field-list">
+      {% for field, count in profile.missing_values.items() %}
+      <div class="quality-field"><span>{{ field }}</span><strong>{{ "{:,}".format(count) }}</strong><span class="quality-percent">{{ "%.1f"|format(count / profile.row_count * 100) }}%</span></div>
+      {% endfor %}
+    </div>
+    {% else %}<div class="empty-state">No missing values found in required columns.</div>{% endif %}
+  </article>
+  <article class="panel">
+    <div class="panel-heading"><div><h2>Timestamp parsing</h2><p>Parseability check; no duration is inferred</p></div><span class="panel-chip">DATES</span></div>
+    <div class="quality-field-list">
+      {% for field, result in profile.date_fields.items() %}
+      <div class="date-check"><div><strong>{{ field }}</strong><span>{{ "{:,}".format(result.present) }} non-blank values</span></div><div class="date-result"><span class="text-success">{{ "{:,}".format(result.parseable) }} parseable</span>{% if result.unparseable %}<span class="text-warning">{{ result.unparseable }} invalid</span>{% endif %}</div></div>
+      {% endfor %}
+    </div>
+    <p class="notice-box">“First Response Time” and “Time to Resolution” are treated as source timestamp fields here. This report does not interpret their values as elapsed durations or infer SLA performance.</p>
+  </article>
+</section>
+<section class="panel labels-panel">
+  <div class="panel-heading"><div><h2>Observed label distribution</h2><p>Counts expose potential target availability and class balance</p></div></div>
+  <div class="label-groups">
+    {% for target, items in profile.targets.items() %}
+    <div class="label-group"><h3>{{ target }} · {{ profile.label_quality[target].distinct_labels }} labels{% if profile.label_quality[target].case_or_whitespace_variants %} · {{ profile.label_quality[target].case_or_whitespace_variants }} inconsistent variants{% endif %}</h3><div class="label-chips">{% for item in items %}<span class="label-chip">{{ item.label }} <strong>{{ "{:,}".format(item.count) }}</strong></span>{% else %}<span class="empty-inline">No observed labels</span>{% endfor %}</div></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}AI prediction{% endblock %}
+{% block breadcrumb %}AI prediction{% endblock %}
+{% block content %}
+<section class="page-heading compact-heading">
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> TICKET INTELLIGENCE</div><h1>Classify a ticket</h1><p class="subtitle">Estimate ticket type and priority with models trained on this dataset.</p></div>
+</section>
+<section class="predict-layout">
+  <form class="panel prediction-form" method="post">
+    <div class="panel-heading"><div><h2>Ticket text</h2><p>Text is scrubbed for email addresses and phone-like numbers before inference.</p></div><span class="panel-chip">TEXT ONLY</span></div>
+    <label for="subject">Subject <span class="optional-label">optional</span></label>
+    <input id="subject" name="subject" maxlength="500" value="{{ subject }}" placeholder="e.g. Cannot connect to my account">
+    <label for="description">Description <span class="optional-label">optional</span></label>
+    <textarea id="description" name="description" rows="9" maxlength="10000" placeholder="Describe the customer's issue...">{{ description }}</textarea>
+    <button class="button button-primary prediction-submit" type="submit"><span aria-hidden="true">✳</span> Predict labels</button>
+    <p class="form-help">Customer name, email, age, gender, ticket ID, status, and resolution are excluded from model features.</p>
+  </form>
+  <aside class="panel prediction-info">
+    {% if results %}
+    <div class="panel-heading"><div><h2>Model estimate</h2><p>Predictions are suggestions, not verified labels.</p></div><span class="prediction-spark">✳</span></div>
+    <div class="prediction-results">
+      {% for target, result in results.items() %}
+      <div class="prediction-result">
+        <span class="prediction-target">{{ target }}</span>
+        <strong>{{ result.label }}</strong>
+        <div class="confidence-track"><span style="width: {{ (result.score * 100)|round(1) }}%"></span></div>
+        <small>Maximum class probability: {{ "%.1f"|format(result.score * 100) }}% · uncalibrated</small>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="notice-box">Review before acting. These probabilities are not calibrated and do not represent causal explanations or a guarantee of correctness.</div>
+    {% else %}
+    <div class="panel-heading"><div><h2>How it works</h2><p>A transparent baseline for exploration</p></div><span class="prediction-spark">✳</span></div>
+    <div class="how-list">
+      <div><span>01</span><p><strong>Text features</strong><small>Subject and description are transformed with TF–IDF.</small></p></div>
+      <div><span>02</span><p><strong>Separate classifiers</strong><small>Ticket type and priority are modeled independently.</small></p></div>
+      <div><span>03</span><p><strong>Privacy by default</strong><small>Direct contact details are removed from the text input.</small></p></div>
+    </div>
+    {% endif %}
+  </aside>
+</section>
+{% endblock %}

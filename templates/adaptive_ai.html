@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Adaptive AI{% endblock %}
+{% block breadcrumb %}Adaptive AI{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <div class="eyebrow"><span class="eyebrow-line"></span> HUMAN-CONTROLLED AUTOMATION</div>
+    <h1>Adaptive AI mode</h1>
+    <p class="subtitle">Choose how Opslyra assists. Every mode has explicit limits and a visible audit trail.</p>
+  </div>
+</section>
+
+<section class="adaptive-current panel">
+  <div class="adaptive-current-copy">
+    <span class="adaptive-live-dot"></span>
+    <div><small>WORKSPACE DEFAULT</small><strong id="adaptive-current-label">{{ modes[settings.mode].label }}</strong></div>
+  </div>
+  <p id="adaptive-mode-feedback">Changing this mode updates the workspace default. Ticket-specific settings can override it.</p>
+  <div class="adaptive-current-actions">
+    <a class="button button-secondary" href="{{ url_for('tickets') }}">Browse tickets</a>
+    <a class="button button-primary" href="{{ url_for('models_page') }}">Review model quality</a>
+  </div>
+</section>
+
+<section class="adaptive-mode-grid" aria-label="Available AI operating modes">
+  {% for mode, details in modes.items() %}
+  <article class="panel adaptive-mode-card {% if settings.mode == mode %}is-current{% endif %}" data-mode-card="{{ mode }}">
+    <div class="adaptive-mode-top"><span class="adaptive-mode-icon mode-icon-{{ mode }}">{% if mode == "manual" %}Ⅱ{% elif mode == "copilot" %}✳{% elif mode == "selective" %}◈{% elif mode == "autonomous" %}⇢{% else %}⏸{% endif %}</span><span class="adaptive-mode-state">{% if settings.mode == mode %}CURRENT{% else %}MODE{% endif %}</span></div>
+    <h2>{{ details.label }}</h2>
+    <p>{{ details.description }}</p>
+    <div class="adaptive-policy-line"><strong>Allowed</strong><span>{{ details.allowed_actions|join(", ") if details.allowed_actions else "No AI actions" }}</span></div>
+    <div class="adaptive-policy-line"><strong>Approval</strong><span>{{ details.approval }}</span></div>
+    <div class="adaptive-policy-line"><strong>Escalation</strong><span>{{ details.escalation }}</span></div>
+    {% if mode != "takeover" %}
+    <button class="button {% if settings.mode == mode %}button-secondary{% else %}button-primary{% endif %} adaptive-set-workspace" type="button" data-mode="{{ mode }}" {% if settings.mode == mode %}disabled{% endif %}>{% if settings.mode == mode %}Active workspace mode{% else %}Set workspace mode{% endif %}</button>
+    {% else %}
+    <span class="adaptive-ticket-only">Available per ticket using Take over manually</span>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+
+<section class="adaptive-lower-grid">
+  <article class="panel adaptive-settings-panel">
+    <div class="panel-heading"><div><h2>Selective automation policy</h2><p>Applies only when Selective Automation or Autonomous mode is active.</p></div><span class="panel-chip">LOCAL DEMO POLICY</span></div>
+    <form id="adaptive-policy-form" class="adaptive-policy-form">
+      <fieldset>
+        <legend>Permitted local label actions</legend>
+        <label><input type="checkbox" name="enabled_actions" value="category" {% if "category" in settings.policy.enabled_actions %}checked{% endif %}> Suggest or save ticket category</label>
+        <label><input type="checkbox" name="enabled_actions" value="priority" {% if "priority" in settings.policy.enabled_actions %}checked{% endif %}> Suggest or save ticket priority</label>
+      </fieldset>
+      <label class="adaptive-threshold">Minimum model score
+        <span><input name="confidence_threshold" type="number" min="0.50" max="0.99" step="0.01" value="{{ '%.2f'|format(settings.policy.confidence_threshold) }}" required><small>0.50–0.99</small></span>
+      </label>
+      <button class="button button-primary" type="submit">Save policy</button>
+      <p class="adaptive-score-warning">These are uncalibrated classifier scores, not calibrated probabilities. Do not use the threshold as production authorization.</p>
+    </form>
+  </article>
+  <article class="panel adaptive-boundary-panel">
+    <div class="panel-heading"><div><h2>What this prototype can do</h2><p>Clear boundaries for a trustworthy demo</p></div><span class="overview-mini-icon metric-amber">!</span></div>
+    <ul class="adaptive-boundary-list">
+      <li>Run the existing TF–IDF classifiers and retrieve similar resolved tickets.</li>
+      <li>Require approval in Copilot mode; save approved labels as local workspace overlays.</li>
+      <li>Record mode changes, recommendations, decisions, and takeover events in SQLite.</li>
+      <li>Risk escalation uses a small keyword list; it is not a security classifier or comprehensive risk detector.</li>
+      <li>Never edit the source CSV, send customer replies, or call external ticketing systems.</li>
+    </ul>
+    <div class="adaptive-warning">Single-user local prototype: authentication and role-based permissions are not implemented. Modes are workflow controls, not an access-control boundary.</div>
+  </article>
+</section>
+
+<section class="panel adaptive-activity-panel">
+  <div class="panel-heading"><div><h2>Workspace activity</h2><p>Recent workspace mode changes</p></div><span class="panel-chip">{{ workspace_activity|length }} EVENTS</span></div>
+  {% if workspace_activity %}
+  <div class="adaptive-activity-list">
+    {% for event in workspace_activity %}
+    <div class="adaptive-activity-row">
+      <span class="adaptive-activity-mark">↻</span>
+      <div><strong>{{ event.details.mode_label if event.details.mode_label is defined else event.event_type|replace("_", " ")|title }}</strong><small>{{ event.event_type|replace("_", " ")|title }} · {{ event.created_at }}</small></div>
+      <span class="adaptive-activity-status">{{ event.status|replace("_", " ") }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="adaptive-empty">No workspace mode changes have been recorded yet.</div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Ticket #{{ ticket["Ticket ID"] }}{% endblock %}
+{% block breadcrumb %}<a href="{{ url_for('tickets') }}">Tickets</a><span class="crumb-divider">/</span> #{{ ticket["Ticket ID"] }}{% endblock %}
+{% block content %}
+<section class="page-heading compact-heading">
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> TICKET DETAILS</div><h1>{{ ticket["Ticket Subject"] or "Untitled ticket" }}</h1><p class="subtitle">Ticket #{{ ticket["Ticket ID"] }} · Personal identifiers are hidden</p></div>
+  <a class="button button-secondary" href="{{ url_for('tickets') }}">← Back to tickets</a>
+</section>
+<section class="detail-layout">
+  <article class="panel detail-main">
+    <div class="panel-heading"><div><h2>Ticket description</h2><p>Text is redacted for common contact details</p></div></div>
+    <div class="ticket-description">{{ ticket["Ticket Description"] or "No description provided." }}</div>
+    <div class="panel-divider"></div>
+    <div class="panel-heading"><div><h2>Existing resolution</h2><p>Historical dataset field; may be empty for unresolved tickets</p></div></div>
+    <div class="ticket-description resolution-text">{{ ticket["Resolution"] or "No resolution recorded." }}</div>
+  </article>
+  <aside class="panel detail-aside">
+    <div class="panel-heading"><div><h2>Ticket attributes</h2><p>Observed fields from source CSV</p></div></div>
+    <dl class="detail-list">
+      <div><dt>Type</dt><dd>{{ ticket["Ticket Type"] or "—" }}</dd></div>
+      <div><dt>Priority</dt><dd><span class="priority-pill priority-{{ (ticket['Ticket Priority'] or '')|lower }}">{{ ticket["Ticket Priority"] or "—" }}</span></dd></div>
+      <div><dt>Status</dt><dd>{{ ticket["Ticket Status"] or "—" }}</dd></div>
+      <div><dt>Channel</dt><dd>{{ ticket["Ticket Channel"] or "—" }}</dd></div>
+      <div><dt>Product</dt><dd>{{ ticket["Product Purchased"] or "—" }}</dd></div>
+      <div><dt>Date of purchase</dt><dd>{{ ticket["Date of Purchase"] or "—" }}</dd></div>
+      <div><dt>First response</dt><dd>{{ ticket["First Response Time"] or "—" }}</dd></div>
+      <div><dt>Time to resolution</dt><dd>{{ ticket["Time to Resolution"] or "—" }}</dd></div>
+      <div><dt>Satisfaction rating</dt><dd>{{ ticket["Customer Satisfaction Rating"] or "—" }}</dd></div>
+    </dl>
+    <div class="panel-divider"></div>
+    <div class="adaptive-ticket-control" data-ticket-id="{{ ticket['Ticket ID'] }}">
+      <div class="panel-heading"><div><h2>Adaptive AI</h2><p>Ticket-specific mode overrides workspace default</p></div></div>
+      <label class="adaptive-ticket-mode">Ticket mode
+        <select id="ticket-ai-mode">
+          <option value="workspace" {% if not ai_mode_override %}selected{% endif %}>Use workspace default ({{ ai_mode_details[workspace_ai_mode].label }})</option>
+          {% for mode in ["manual", "copilot", "selective", "autonomous", "takeover"] %}
+          <option value="{{ mode }}" {% if ai_mode_override == mode %}selected{% endif %}>{{ ai_mode_details[mode].label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% if ai_mode != "takeover" %}
+      <button class="button button-primary adaptive-run-ticket" type="button">Run permitted AI workflow</button>
+      {% else %}
+      <div class="adaptive-takeover-banner">Human takeover active · AI processing is paused.</div>
+      {% endif %}
+      <p class="adaptive-inline-feedback" role="status" aria-live="polite"></p>
+      {% if ai_override and (ai_override.ticket_type or ai_override.ticket_priority) %}
+      <div class="adaptive-overlay">
+        <strong>Opslyra label overlay</strong>
+        <span>Category: {{ ai_override.ticket_type or "Unchanged" }}</span>
+        <span>Priority: {{ ai_override.ticket_priority or "Unchanged" }}</span>
+        <small>Workspace demo state only; source CSV values above are unchanged.</small>
+      </div>
+      {% endif %}
+    </div>
+  </aside>
+</section>
+<section class="panel adaptive-ticket-history">
+  <div class="panel-heading"><div><h2>AI activity timeline</h2><p>Suggestions, decisions, mode changes, and local workflow results</p></div><span class="panel-chip">{{ ai_activity|length }} EVENTS</span></div>
+  {% if ai_activity %}
+  <div class="adaptive-activity-list">
+    {% for event in ai_activity %}
+    <article class="adaptive-activity-row">
+      <span class="adaptive-activity-mark">{% if event.event_type == "human_takeover" %}Ⅱ{% elif event.event_type == "recommendation" %}✳{% else %}↻{% endif %}</span>
+      <div class="adaptive-ticket-event-content">
+        <strong>{{ event.event_type|replace("_", " ")|title }}</strong>
+        <small>{{ ai_mode_details[event.mode].label }} · {{ event.created_at }}</small>
+        {% if event.details.workflow is defined %}
+        <p>{{ event.details.workflow.message }}</p>
+        {% if event.details.workflow.risk_flags %}<small>Review signals: {{ event.details.workflow.risk_flags|join(", ") }}</small>{% endif %}
+        {% endif %}
+        {% if event.details.extractive_preview is defined and event.details.extractive_preview %}
+        <p><strong>Extractive text preview:</strong> {{ event.details.extractive_preview }}</p>
+        {% endif %}
+        {% if event.details.predictions is defined %}
+        <div class="adaptive-prediction-pills">
+          {% for target in ["Ticket Type", "Ticket Priority"] %}
+            {% if event.details.predictions[target] is defined %}
+            <span>{{ target }}: <strong>{{ event.details.predictions[target].label }}</strong><small>score {{ "%.1f"|format(event.details.predictions[target].score * 100) }}% · uncalibrated</small></span>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if event.details.similar_cases is defined and event.details.similar_cases %}
+        <div class="adaptive-similar-cases">
+          <strong>Similar resolved tickets (evidence, not guaranteed fixes)</strong>
+          {% for case in event.details.similar_cases %}
+          <a href="{{ url_for('ticket_detail', ticket_id=case.ticket_id) }}">#{{ case.ticket_id }} · {{ case.subject }} · {{ "%.0f"|format(case.similarity * 100) }}% text similarity</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if event.event_type == "recommendation" and event.status == "pending_approval" %}
+        <div class="adaptive-approval-actions">
+          <button class="button button-primary adaptive-resolve-recommendation" type="button" data-activity-id="{{ event.id }}" data-resolution="approve">Approve label overlay</button>
+          <button class="button button-secondary adaptive-toggle-edit" type="button" aria-expanded="false" aria-controls="edit-recommendation-{{ event.id }}">Edit</button>
+          <button class="button button-secondary adaptive-resolve-recommendation" type="button" data-activity-id="{{ event.id }}" data-resolution="reject">Reject</button>
+        </div>
+        <form class="adaptive-edit-form" id="edit-recommendation-{{ event.id }}" data-activity-id="{{ event.id }}" hidden>
+          <label>Ticket category
+            <select name="Ticket Type">
+              {% for label in ticket_types %}
+              <option value="{{ label }}" {% if label == event.details.predictions["Ticket Type"].label %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Priority
+            <select name="Ticket Priority">
+              {% for label in ticket_priorities %}
+              <option value="{{ label }}" {% if label == event.details.predictions["Ticket Priority"].label %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button class="button button-primary" type="submit">Save edited labels</button>
+        </form>
+        {% endif %}
+      </div>
+      <span class="adaptive-activity-status">{{ event.status|replace("_", " ") }}</span>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="adaptive-empty">No AI workflow events for this ticket. Manual ticket details remain available.</div>
+  {% endif %}
+  <p class="adaptive-score-warning">Model scores shown here are not calibrated probabilities. Similarity is lexical TF–IDF, not semantic proof.</p>
+</section>
+{% endblock %}

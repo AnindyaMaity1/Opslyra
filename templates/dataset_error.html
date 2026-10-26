@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Dataset unavailable{% endblock %}
+{% block breadcrumb %}Dataset unavailable{% endblock %}
+{% block content %}
+<div class="panel empty-state empty-large error-state">
+  <span class="empty-icon">!</span><strong>Could not load the configured dataset</strong>
+  <span>{{ message }}</span>
+  <span>Set <code>TICKETMIND_DATASET</code> to the path of a CSV containing all 17 required columns, then restart the app.</span>
+</div>
+{% endblock %}

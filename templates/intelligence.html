@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Incident lab{% endblock %}
+{% block breadcrumb %}Incident lab{% endblock %}
+{% block content %}
+<section class="page-heading compact-heading">
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> LIVE RESEARCH WORKFLOWS</div><h1>Incident intelligence lab</h1><p class="subtitle">Change inputs, submit corrections, retrain, and compare visible outputs using the connected dataset.</p></div>
+  <span class="prototype-tag"><span class="status-dot"></span> Local prototype · no automated ticket actions</span>
+</section>
+<div class="notice-box lab-notice"><strong>Evidence boundary:</strong> The CSV contains no team assignments or SLA targets, and its support timestamps cover {{ radar.days_observed }} calendar days. Team routing and SLA are therefore simulations; SLA values are heuristic risk indices, not calibrated probabilities. Similarity, recurrence, and model scores are exploratory signals, not confirmed incidents.</div>
+
+<section class="lab-grid">
+  <article class="panel lab-card" id="human-loop">
+    <div class="lab-title"><span class="feature-number">01</span><div><h2>Human-in-the-loop learning</h2><p>Save a correction, prioritize informative examples, then create a version.</p></div></div>
+    <form class="lab-form" method="post" action="{{ url_for('intelligence_page') }}">
+      <input type="hidden" name="action" value="correction">
+      <label>Ticket ID<input name="ticket_id" required placeholder="e.g. 42" list="ticket-ids"></label>
+      <label>Correct this field<select name="target"><option>Ticket Type</option><option>Ticket Priority</option><option>Team</option></select></label>
+      <label>Correct label<input name="corrected_label" required maxlength="100" placeholder="Your reviewed label"></label>
+      <button class="button button-primary" type="submit">Save reviewed correction</button>
+    </form>
+    <datalist id="ticket-ids">{% for ticket in ticket_options %}<option value="{{ ticket['Ticket ID'] }}">{{ ticket["Ticket Subject"] }}</option>{% endfor %}</datalist>
+    <div class="mini-stat-row"><span>Reviewed examples</span><strong>{{ corrections|length }}</strong><span>Saved examples are ranked by prediction uncertainty.</span></div>
+    {% if corrections %}
+    <div class="compact-table">
+      {% for item in corrections[:5] %}
+      <div><span>#{{ item.ticket_id }} · {{ item.target }}</span><strong>{{ item.corrected_label }}</strong><small>Information score {{ "%.2f"|format(item.informativeness) }}</small></div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="empty-inline">No corrections submitted in this local workspace yet.</p>{% endif %}
+    <form method="post" action="{{ url_for('intelligence_page') }}" class="inline-action"><input type="hidden" name="action" value="train"><button class="button button-secondary" type="submit">Train new model version</button><span>Uses available corrections as reviewed training examples.</span></form>
+  </article>
+
+  <article class="panel lab-card" id="open-set">
+    <div class="lab-title"><span class="feature-number">02</span><div><h2>Open-set incident discovery</h2><p>Compare new text with the observed ticket corpus.</p></div></div>
+    <form class="lab-form lab-form-stack" method="post">
+      <input type="hidden" name="action" value="novelty">
+      <label>Subject<input name="subject" maxlength="500" placeholder="Describe an unfamiliar issue"></label>
+      <label>Description<textarea name="description" rows="3" maxlength="10000" placeholder="Add symptoms, affected services, or error code"></textarea></label>
+      <button class="button button-primary" type="submit">Check for novelty</button>
+    </form>
+    {% if feature_result and feature_result.action == "novelty" %}
+      {% set result = feature_result.data %}
+      <div class="result-banner {% if result.status == 'unfamiliar' %}result-warning{% else %}result-positive{% endif %}">
+        <strong>{% if result.status == "unfamiliar" %}Potential unfamiliar incident{% elif result.status == "known_like" %}Similar known examples found{% else %}Insufficient text/data{% endif %}</strong>
+        <span>Nearest similarity {{ "%.3f"|format(result.nearest_similarity) }} · local density {{ "%.3f"|format(result.local_density) }}</span>
+        <span>Decision: {{ "UNKNOWN" if result.status == "unfamiliar" else "KNOWN-LIKE" }} · thresholds {{ "%.3f"|format(result.threshold) }} / {{ "%.3f"|format(result.density_threshold) }}</span>
+        {% if result.validation_samples %}<small>Threshold reference: lower 5th percentile of {{ result.validation_samples }} within-corpus nearest-neighbor checks; not independent OOD validation.</small>{% endif %}
+      </div>
+      {% for item in result.nearest %}<a class="evidence-row" href="{{ url_for('ticket_detail', ticket_id=item.ticket_id) }}"><span>#{{ item.ticket_id }} · {{ item.subject }}</span><strong>{{ "%.0f"|format(item.similarity * 100) }}%</strong></a>{% endfor %}
+    {% else %}<div class="mini-stat-row"><span>Observed corpus</span><strong>{{ "{:,}".format(profile.row_count) }} tickets</strong><span>Use novel wording to see the nearest examples and threshold decision.</span></div>{% endif %}
+  </article>
+
+  <article class="panel lab-card" id="counterfactual">
+    <div class="lab-title"><span class="feature-number">03</span><div><h2>Counterfactual text explorer</h2><p>See how added context changes model outputs.</p></div></div>
+    <form class="lab-form lab-form-stack" method="post">
+      <input type="hidden" name="action" value="counterfactual">
+      <label>Subject<input name="subject" maxlength="500" placeholder="e.g. Login outage"></label>
+      <label>Description<textarea name="description" rows="3" maxlength="10000" placeholder="Describe the current issue"></textarea></label>
+      <button class="button button-primary" type="submit">Compare wording scenarios</button>
+    </form>
+    {% if feature_result and feature_result.action == "counterfactual" %}
+    <div class="scenario-results">
+      {% for scenario in feature_result.data %}
+      <div class="scenario-card"><strong>{{ scenario.name }}</strong><small>{{ scenario.note }}</small>
+        {% for target, prediction in scenario.predictions.items() %}<span>{{ target }}: <b>{{ prediction.label }}</b> · {{ "%.0f"|format(prediction.score * 100) }}%</span>{% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+      {% endif %}
+      <p class="method-note">The appended phrases are hypothetical text changes. Model association is not a causal guarantee.</p>
+  </article>
+
+  <article class="panel lab-card" id="relationship-graph">
+    <div class="lab-title"><span class="feature-number">04</span><div><h2>Incident relationship graph</h2><p>Semantic links enriched with product, error-code, and time clues.</p></div></div>
+    <form class="inline-form" method="get"><label>Center ticket<input type="number" name="ticket_id" value="{{ active_ticket_id }}" min="1"></label><button class="button button-secondary" type="submit">Explore</button></form>
+    {% if graph.ticket %}
+    <div class="graph-center"><span class="graph-node">#{{ graph.ticket.ticket_id }}</span><strong>{{ graph.ticket.subject or "Untitled ticket" }}</strong><small>{{ graph.ticket.product }}{% if graph.ticket.error_codes %} · {{ graph.ticket.error_codes|join(", ") }}{% endif %}</small></div>
+    <div class="graph-links">
+      {% for link in graph.links %}
+      <a href="{{ url_for('ticket_detail', ticket_id=link.ticket_id) }}" class="graph-link"><span class="graph-edge"></span><span class="graph-node graph-node-small">#{{ link.ticket_id }}</span><span class="graph-link-copy"><strong>{{ link.subject }}</strong><small>{{ link.link_reasons|join(" · ") if link.link_reasons else "text neighbor" }}</small></span><b>{{ "%.0f"|format(link.link_score * 100) }}%</b></a>
+      {% else %}<p class="empty-inline">No text-similar tickets were found.</p>{% endfor %}
+    </div>
+    {% endif %}
+  </article>
+
+  <article class="panel lab-card" id="sla-sandbox">
+    <div class="lab-title"><span class="feature-number">05</span><div><h2>SLA risk sandbox</h2><p>Adjust assumptions and see the transparent risk index update.</p></div></div>
+    <form class="lab-form sla-form" method="post">
+      <input type="hidden" name="action" value="sla">
+      <label>Priority<select name="priority">{% for item in ["Low", "Medium", "High", "Critical"] %}<option>{{ item }}</option>{% endfor %}</select></label>
+      <label>Elapsed hours<input name="elapsed_hours" type="number" min="0" step="0.5" value="{{ request.form.get('elapsed_hours', 2) }}"></label>
+      <label>Target hours<input name="target_hours" type="number" min="0.5" step="0.5" value="{{ request.form.get('target_hours', 8) }}"></label>
+      <label>Queue load<input name="queue_load" type="number" min="0" value="{{ request.form.get('queue_load', 20) }}"></label>
+      <button class="button button-primary" type="submit">Recalculate scenario</button>
+    </form>
+    {% if feature_result and feature_result.action == "sla" %}
+    <div class="risk-output"><strong>{{ "%.0f"|format(feature_result.data.risk_index * 100) }}<small>/100</small></strong><span>Heuristic risk index</span></div>
+    <div class="factor-list"><span>Elapsed / target <b>{{ "%.0f"|format(feature_result.data.elapsed_ratio * 100) }}%</b></span><span>Priority contribution <b>+{{ "%.0f"|format(feature_result.data.priority_factor * 100) }}</b></span><span>Queue contribution <b>+{{ "%.0f"|format(feature_result.data.queue_factor * 100) }}</b></span></div>
+    {% else %}<p class="method-note">No SLA target labels exist in this CSV. This is an adjustable heuristic scenario, not a calibrated breach probability.</p>{% endif %}
+  </article>
+
+  <article class="panel lab-card" id="routing">
+    <div class="lab-title"><span class="feature-number">06</span><div><h2>Adaptive routing simulator</h2><p>Compare skill matching with round-robin allocation.</p></div></div>
+    <form class="inline-form" method="post">
+      <input type="hidden" name="action" value="routing">
+      <label>Capacity scale<input name="capacity_factor" type="number" min="0.5" max="2" step="0.1" value="{{ request.form.get('capacity_factor', 1) }}"></label>
+      <button class="button button-secondary" type="submit">Run simulation</button>
+    </form>
+    {% if feature_result and feature_result.action == "routing" %}
+    <div class="route-summary">Simulated {{ "{:,}".format(feature_result.data.ticket_count) }} category counts · capacity coverage {{ "%.0f"|format(feature_result.data.capacity_coverage * 100) }}%</div>
+    <div class="compact-table">{% for team in feature_result.data.skill_match %}<div><span>{{ team.team }}</span><strong>{{ "{:,}".format(team.tickets) }} tickets</strong><small>{{ "%.0f"|format(team.utilization * 100) }}% simulated capacity</small></div>{% endfor %}</div>
+    <p class="method-note">Skills and capacities are example configuration, not dataset ground truth. No real tickets are routed.</p>
+    {% else %}<div class="skill-tags"><span>Technical Support</span><span>Billing &amp; Payments</span><span>Retention</span></div><p class="method-note">Team skills/capacities are explicit demo assumptions. The CSV contains no historical team assignment labels.</p>{% endif %}
+  </article>
+
+  <article class="panel lab-card" id="recurrence-radar">
+    <div class="lab-title"><span class="feature-number">07</span><div><h2>Recurrence &amp; early-warning radar</h2><p>Daily volumes and text clusters from observed ticket data.</p></div></div>
+    {% if radar.points %}
+    <div class="radar-chart" role="img" aria-label="Daily first response ticket counts">
+      {% set max_volume = radar.points|map(attribute="count")|max %}
+      {% for point in radar.points %}
+      <div class="radar-bar-group"><span class="radar-bar-value">{{ point.count }}</span><div class="radar-bar" style="height: {{ (point.count / max_volume * 100)|round(0) }}%"></div><span class="radar-date">{{ point.date }}</span></div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="empty-inline">No valid response timestamps are available.</p>{% endif %}
+    <div class="cluster-list">{% for cluster in clusters[:5] %}<div><span class="cluster-count">{{ cluster.count }}</span><strong>{{ cluster.label }}</strong><small>Example IDs: {% for ticket_id in cluster.sample_ids %}<a href="{{ url_for('ticket_detail', ticket_id=ticket_id) }}">#{{ ticket_id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</small></div>{% endfor %}</div>
+    {% if radar.spikes %}<div class="result-banner result-warning"><strong>Potential volume spike</strong><span>{{ radar.spikes|length }} date(s) exceed the 2σ screen.</span></div>{% else %}<p class="method-note">No 2σ daily-volume spike detected. Only {{ radar.days_observed }} dates are observed; seasonal separation is not supported.</p>{% endif %}
+  </article>
+
+  <article class="panel lab-card" id="privacy">
+    <div class="lab-title"><span class="feature-number">08</span><div><h2>Privacy-aware text handling</h2><p>Redaction scan and local count-only audit trail.</p></div></div>
+    <form class="lab-form lab-form-stack" method="post">
+      <input type="hidden" name="action" value="privacy_scan">
+      <label>Try a redaction scan<textarea name="privacy_text" rows="3" placeholder="Paste sample text with email, @username, IP, token, or phone"></textarea></label>
+      <button class="button button-secondary" type="submit">Redact before inference</button>
+    </form>
+    {% if feature_result and feature_result.action == "privacy_scan" %}
+    <div class="redacted-output"><strong>Redacted preview</strong><span>{{ feature_result.data.text }}</span><small>Detected: {% for kind, count in feature_result.data.counts.items() if count %}{{ kind }} ({{ count }}){% if not loop.last %}, {% endif %}{% else %}no supported pattern{% endfor %}</small></div>
+    {% endif %}
+    <div class="mini-stat-row"><span>Audit events</span><strong>{{ audit.events }}</strong><span>Recorded redaction counts by category; raw text is not stored.</span></div>
+    <p class="method-note">This prototype has no authenticated roles. Redaction is defense-in-depth, not full PII detection or production access control.</p>
+  </article>
+
+  <article class="panel lab-card" id="resolution-memory">
+    <div class="lab-title"><span class="feature-number">09</span><div><h2>Evidence-grounded resolution memory</h2><p>Find similar historical tickets with recorded resolutions.</p></div></div>
+    <form class="lab-form lab-form-stack" method="post">
+      <input type="hidden" name="action" value="memory">
+      <label>Subject<input name="subject" maxlength="500" placeholder="Describe the issue to search"></label>
+      <label>Description<textarea name="description" rows="3" maxlength="10000" placeholder="Add details to improve matching"></textarea></label>
+      <button class="button button-primary" type="submit">Find resolved examples</button>
+    </form>
+    {% if feature_result and feature_result.action == "memory" %}
+      {% for item in feature_result.data %}
+      <div class="evidence-card"><a href="{{ url_for('ticket_detail', ticket_id=item.ticket_id) }}">Ticket #{{ item.ticket_id }} · {{ item.subject }}</a><span>{{ "%.0f"|format(item.similarity * 100) }}% text similarity · {{ item.ticket_type }}</span><p>{{ item.resolution or "No recorded resolution." }}</p></div>
+      {% else %}<p class="empty-inline">No resolved ticket with matching text was found.</p>{% endfor %}
+    {% else %}
+      {% for item in resolved_memory[:3] %}<div class="evidence-card"><a href="{{ url_for('ticket_detail', ticket_id=item.ticket_id) }}">Ticket #{{ item.ticket_id }} · {{ item.subject }}</a><span>{{ "%.0f"|format(item.similarity * 100) }}% similarity</span><p>{{ item.resolution or "No recorded resolution." }}</p></div>{% else %}<p class="empty-inline">No similar resolved ticket with a resolution was found for this graph center.</p>{% endfor %}
+    {% endif %}
+    <p class="method-note">References come from the CSV only; no approved knowledge-base articles were provided. Similarity is not a verified fix.</p>
+  </article>
+
+  <article class="panel lab-card observatory-card" id="observatory">
+    <div class="lab-title"><span class="feature-number">10</span><div><h2>Model reliability observatory</h2><p>Visible model versions, held-out scores, and chronological review signals.</p></div></div>
+    <div class="observatory-status {% if drift.review_required %}status-review{% else %}status-ready{% endif %}"><strong>{% if drift.performance_regression %}Performance regression review{% elif drift.distribution_shift_detected %}Distribution shift review{% elif drift.review_required %}Review required{% else %}Monitor{% endif %}</strong><span>{{ drift.days_observed }} timestamped day(s) · category JS {{ "%.3f"|format(drift.category_jensen_shannon) }} · chronological validation not yet performed</span></div>
+    <div class="mini-stat-row"><span>Unknown-rate monitor</span><strong>{{ novelty_summary.unknown }} / {{ novelty_summary.total }} ({{ "%.0f"|format(novelty_summary.unknown_rate * 100) }}%)</strong><span>Based only on novelty checks submitted in this local workspace.</span></div>
+    <div class="shift-list">{% for item in drift.category_shift %}<div><span>{{ item.label }}</span><span>earlier {{ "%.0f"|format(item.early * 100) }}%</span><span>later {{ "%.0f"|format(item.late * 100) }}%</span></div>{% else %}<p class="empty-inline">Not enough dated groups for a time comparison.</p>{% endfor %}</div>
+    {% if version_deltas %}<div class="shift-list">{% for target, delta in version_deltas.items() %}<div><span>{{ target }} version change</span><span class="{% if delta < -0.05 %}text-warning{% else %}text-success{% endif %}">{{ "%+.2f"|format(delta * 100) }} percentage points</span></div>{% endfor %}</div>{% endif %}
+    <div class="version-list">
+      {% for version in versions[:5] %}
+      <div><strong>v{{ version.version }} {% if version.active %}<em>ACTIVE</em>{% endif %}</strong><span>{{ version.created_at }}</span><small>{{ version.training_examples }} training examples · {{ version.metrics|length }} target report(s){% for target, metrics in version.metrics.items() if metrics.accuracy is not none %} · {{ target }} accuracy {{ "%.2f"|format(metrics.accuracy) }}{% endfor %}</small>
+        {% if not version.active %}<form method="post"><input type="hidden" name="action" value="rollback"><input type="hidden" name="version" value="{{ version.version }}"><button class="text-button" type="submit">Rollback</button></form>{% endif %}
+      </div>
+      {% else %}<p class="empty-inline">No model versions stored yet.</p>{% endfor %}
+    </div>
+    <p class="method-note">Random-split scores are not calibration or time-aware drift evidence. Production deployment approval and role-based governance are not implemented.</p>
+  </article>
+</section>
+{% endblock %}
