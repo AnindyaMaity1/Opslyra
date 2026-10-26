@@ -13,10 +13,7 @@ The application reads a configured CSV file. Dashboard counts and
 data-quality indicators are calculated from the actual rows in that file
 rather than hardcoded demo values.
 
-> **Project status:** Research and demonstration prototype. It is not a
-> production-ready, multi-user SaaS platform. See [Prototype Boundaries
-> and Limitations](#prototype-boundaries-and-limitations) before using
-> it with real customer data.
+> **Project status:** Research prototype.
 
 ## Table of Contents
 
