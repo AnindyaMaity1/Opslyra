@@ -303,40 +303,6 @@ and response-time features. It reports exploratory clustering and
 resampled-cluster stability, and provides a small chronological
 comparison when enough dated observations are available.
 
-## Technology Stack
-
-The current project is a Python web application.
-
-  -----------------------------------------------------------------------
-  Area                                Technology or approach
-  ----------------------------------- -----------------------------------
-  Backend                             Python and Flask
-
-  Frontend                            HTML and CSS with the existing
-                                      project templates and interface
-
-  Ticket data                         CSV file configured through an
-                                      environment variable or default
-                                      path
-
-  Local workflow state                SQLite-backed local overlays and
-                                      state under `instance/`
-
-  NLP text features                   TF-IDF vectorization
-
-  Baseline classifiers                scikit-learn Logistic Regression
-
-  Research workflows                  scikit-learn text similarity,
-                                      dimensionality reduction,
-                                      clustering, and evaluation
-                                      utilities
-
-  Charts and dashboard                Existing application views and
-                                      interactive visualizations
-
-  Tests                               pytest
-  -----------------------------------------------------------------------
-
 ## Dataset and Data Handling
 
 The supplied dataset contains these 17 columns:
@@ -458,25 +424,6 @@ Handling](#dataset-and-data-handling).
 Create and activate a virtual environment using your operating system's
 Python commands, install dependencies from `requirements.txt`, set the
 environment variables described below, and run `python app.py`.
-
-## Configuration
-
-  -----------------------------------------------------------------------
-  Variable                            Purpose
-  ----------------------------------- -----------------------------------
-  `OPSLYRA_SECRET_KEY`                Preferred Flask session secret. Set
-                                      a long, random, persistent value.
-
-  `TICKETMIND_SECRET_KEY`             Legacy secret variable accepted by
-                                      the prototype.
-
-  `TICKETMIND_DATASET`                Optional path to the CSV file. If
-                                      omitted, the default CSV beside
-                                      `app.py` is used.
-  -----------------------------------------------------------------------
-
-Do not expose the local development server to the public internet. A
-configured Flask secret does not add authentication or tenant isolation.
 
 ## How to Explore the Application
 
