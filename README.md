@@ -1,17 +1,23 @@
 # Opslyra
 
+This project is built under the guidance of **Prof. Dr. Govind Pandey**.
+
+LinkedIn Profile - [Link](https://www.linkedin.com/in/dr-govind-pandey-145a43131/)
+
 **From Every Ticket to Intelligent Action.**
 
-Opslyra is a local Flask research prototype for exploring customer-support
-tickets, evaluating text-classification methods, and testing human-controlled
-AI-assisted workflows. It includes a ticket dashboard, model evaluation,
-Graphs, an Incident Lab, Adaptive AI controls, and reproducible research
-experiments.
+Opslyra is a **SaaS-style IT service intelligence workspace** for exploring
+support tickets, evaluating text-classification models, and running
+human-controlled AI-assisted workflows. Its dashboard brings ticket
+operations, model diagnostics, incident research, and data-quality checks into
+one cohesive interface.
 
-> **Research prototype:** Opslyra is not a production-ready, multi-user
-> service. It does not connect to a live ticketing system or send customer
-> replies. Read [limitations](#limitations) before using it with sensitive
-> data.
+> **Deployment scope:** Opslyra currently runs as a local, single-workspace
+> prototype. It is not yet a hosted, authenticated, multi-tenant SaaS service;
+> it does not connect to a live ticketing system or send customer replies.
+> The interface demonstrates a SaaS product experience, while persistence and
+> computation remain local. See [limitations](#limitations) before using it
+> with sensitive data.
 
 ## Screenshots
 
@@ -58,32 +64,138 @@ Results depend on the dataset and software versions. Run the audit and
 experiments again after changing the CSV; do not present these figures as
 future or production performance.
 
-## Features
+## SaaS Workspace Features
 
-- **Dashboard and ticket explorer:** search, filter, inspect, and summarize the
-  configured ticket data.
-- **Privacy-conscious views:** customer names and email addresses are omitted
-  from ticket views; common personal identifiers and credential-like strings
-  are redacted from displayed/model text. Redaction is pattern-based and is not
-  a guarantee of anonymization.
-- **Ticket classification:** separate ticket-type and priority classifiers
-  using redacted subject and description text with TF-IDF features.
-- **Graphs (`/graphs`):** grouped cross-validated accuracy versus a
+Opslyra is organized as a single analyst workspace with a persistent sidebar,
+workspace controls, responsive cards, tables, and charts. The main navigation
+contains the following product areas:
+
+| Workspace area | What it provides |
+|---|---|
+| **Overview** (`/`) | A high-level view of the configured ticket dataset and service signals. |
+| **Graphs** (`/graphs`) | Cross-validated label-signal comparisons, duplicate-text audits, probability calibration, and downloadable charts. |
+| **Tickets** (`/tickets`) | Search and filter ticket records, browse the dataset in pages of 10, and open a detailed ticket view. |
+| **AI prediction** (`/predict`) | Submit a ticket subject and description to estimate ticket type and priority using the trained local baselines. |
+| **Model evaluation** (`/models`) | Review validation metrics and class-level performance, and train refreshed baseline models. |
+| **Incident lab** (`/intelligence`) | Explore ten local workflows for human review, novelty, relationships, routing simulations, and model operations. |
+| **Adaptive AI** (`/adaptive-ai`) | Configure workspace and ticket-level assistance modes, approval policies, and validation-informed risk–coverage settings. |
+| **Research modules** (`/research`) | Run open-set and supporting experiments with grouped splits and reported evaluation details. |
+| **Data quality** (`/data-quality`) | Inspect schema, missingness, timestamp parseability, and observed label distributions without rewriting source values. |
+
+### Ticket and model workflows
+
+- **Ticket operations:** search/filter the configured CSV, review core ticket
+  fields in a compact paginated table, and open a full-width ticket detail
+  view. The detail page separates the ticket description from its attributes
+  and shows the activity timeline when local AI workflow events exist.
+- **Label overlays:** human-approved ticket type and priority changes are
+  stored as local overlays. They do not modify the source CSV. Ticket pages
+  identify active human takeover and display saved overlay labels.
+- **Predictions:** the AI prediction page accepts subject and description text,
+  redacts common sensitive patterns before model use, and presents model
+  estimates as suggestions—not verified labels.
+- **Evaluation:** ticket type and ticket priority are evaluated separately.
+  Reports include repeated, grouped cross-validation, accuracy, macro/weighted
+  F1, descriptive intervals, class performance, and calibration diagnostics
+  where available.
+- **Chart export:** Graphs include cross-validated accuracy versus a
   fold-local majority baseline, exact/near-duplicate label-conflict analysis,
-  and reliability diagrams/ECE for selectable classification targets. Graph
-  downloads are PNGs with 1200-DPI resolution metadata.
-- **Adaptive AI (`/adaptive-ai`):** manual, copilot, selective, autonomous,
-  and ticket takeover modes; target-specific validation risk–coverage
-  operating points; and a side-effect-free policy preview. Human acceptance
-  and correction rates are shown only when genuine reviewer events exist.
-- **Incident Lab (`/intelligence`):** ten local workflows, including
-  corrections, novelty, counterfactual exploration, similarity, routing and
-  SLA-risk simulations.
-- **Research (`/research`):** open-set detection as the primary experiment,
-  with supporting active-learning, constrained-routing, temporal,
-  calibration/ablation, and risk–coverage studies.
-- **Local audit trail and experiments:** workflow activity and experiment
-  records are stored locally under `instance/`.
+  and probability reliability diagnostics. Supported chart downloads are PNG
+  files tagged with 1200-DPI resolution metadata.
+
+### Adaptive AI operating modes
+
+Adaptive AI makes the allowed level of assistance visible and configurable:
+
+- **Manual:** no AI workflow actions are taken.
+- **Copilot:** recommendations require a human decision.
+- **Selective automation:** local label actions can be gated by a chosen
+  validation risk–coverage operating point.
+- **Autonomous:** permits only the explicitly enabled local label actions;
+  it does not call external systems or contact customers.
+- **Human takeover:** ticket-specific pause for AI recommendations until
+  control is released.
+
+The policy can enable category and priority actions and choose between a
+target-coverage or target-selective-risk operating point. Dry-run previews are
+designed to show proposed workflow results without committing state changes.
+Mode changes, recommendations, approvals, corrections, and takeover events
+are recorded in the local SQLite audit trail. The policy and risk thresholds
+are demo controls, not service-level guarantees.
+
+### Incident Lab workflows
+
+The Incident Lab (`/intelligence`) contains ten independent local explorations:
+
+1. **Human-in-the-loop learning** — save reviewed labels, rank corrections by
+   information value, and train a model version from available corrections.
+2. **Open-set incident discovery** — compare submitted text with observed
+   tickets and show nearest examples and threshold-based novelty signals.
+3. **Counterfactual text explorer** — compare model outputs under changed
+   wording; this is a sensitivity demonstration, not causal evidence.
+4. **Incident relationship graph** — surface related tickets using text and
+   available product, error-code, and time clues.
+5. **SLA risk sandbox** — adjust assumptions and inspect a transparent
+   simulated risk index.
+6. **Adaptive routing simulator** — compare skill matching with a
+   round-robin baseline under configured team constraints.
+7. **Recurrence and early-warning radar** — inspect observed ticket volumes
+   and text clusters; forecasts are only meaningful when date support allows.
+8. **Privacy-aware text handling** — scan submitted text for common sensitive
+   patterns and retain a local count-oriented audit.
+9. **Evidence-grounded resolution memory** — retrieve similar historical
+   tickets that have recorded resolutions.
+10. **Model reliability observatory** — inspect model versions and available
+    held-out or chronological evaluation signals.
+
+Routing capacity, team skills, processing time, SLA budgets, and text-keyword
+impact are configured or proxy values where the dataset provides no verified
+operational ground truth. Treat these tools as simulations.
+
+### Research modules
+
+The primary experiment in Research (`/research`) is **open-set ticket
+classification and unseen-class rejection**. It supports selectable targets,
+unknown classes, repeatable random seeds, grouped duplicate handling,
+validation-based threshold selection, per-seed metrics, and ROC/precision–
+recall visualizations.
+
+Supporting research modules cover:
+
+- Dataset and label-signal audits, baseline comparisons, calibration, feature
+  ablation, and risk–coverage analysis.
+- A novelty-aware annotation queue combining model uncertainty, novelty,
+  diversity, text-derived impact, and estimated annotation effort.
+- A constrained routing simulator separating text-model recommendations from
+  configured team workload, capacity, and SLA feasibility.
+- Temporal incident fingerprints that combine ticket language and available
+  metadata, with recurrence evaluation only when timestamps and sample sizes
+  support it.
+
+Research outputs are exploratory diagnostics. The app does not claim
+production precision/recall for incident detection, verified operational
+routing outcomes, or causal impact.
+
+## Product Architecture and Local Data Flow
+
+1. **Load:** Flask reads the configured CSV through the dataset layer and
+   validates the required ticket schema.
+2. **Prepare:** model text is built from permitted ticket text fields and
+   passed through pattern-based redaction before supported prediction and
+   analysis paths.
+3. **Analyze:** pandas/NumPy/scikit-learn power the dashboard summaries,
+   grouped evaluation, graphs, predictions, and research modules.
+4. **Persist locally:** SQLite stores workspace settings, review events,
+   activity, and approved label overlays. Model artifacts and experiment
+   snapshots are stored under `instance/`.
+5. **Present:** Flask templates render the single-workspace SaaS-style UI;
+   static CSS and JavaScript provide the responsive interface and chart
+   interactions.
+
+The input CSV is treated as the source dataset and is not edited when a human
+approves a label correction. SQLite state and model artifacts are local to
+the current installation; they are not user-isolated or synchronized across
+hosted workspaces.
 
 ## Research and Reproducibility
 
