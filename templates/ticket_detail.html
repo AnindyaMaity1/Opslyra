@@ -15,6 +15,29 @@
   </div>
   <a class="button button-secondary" href="{{ url_for('tickets') }}">← Back to tickets</a>
 </section>
+{% if ai_mode == "takeover" %}
+<section class="panel adaptive-warning" role="status">
+  <strong>Human takeover active</strong>
+  <p>AI recommendations are paused for this ticket until human control is released.</p>
+</section>
+{% endif %}
+
+{% if ai_override %}
+<section class="panel adaptive-ticket-overlay">
+  <div class="panel-heading">
+    <div>
+      <h2>Opslyra label overlay</h2>
+      <p>Human-approved labels saved locally. The source dataset remains unchanged.</p>
+    </div>
+  </div>
+  {% if ai_override.get("ticket_type") %}
+  <p>Category: {{ ai_override["ticket_type"] }}</p>
+  {% endif %}
+  {% if ai_override.get("ticket_priority") %}
+  <p>Priority: {{ ai_override["ticket_priority"] }}</p>
+  {% endif %}
+</section>
+{% endif %}
 <section class="ticket-detail-layout" aria-label="Ticket information">
   <article class="panel ticket-description-card">
     <div class="ticket-detail-section-heading">

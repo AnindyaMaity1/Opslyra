@@ -329,7 +329,24 @@ def test_human_takeover_blocks_new_ai_workflow(client):
     assert response.status_code == 409
     detail = client.get("/tickets/2")
     assert b"Human takeover active" in detail.data
+    assert b"AI recommendations are paused for this ticket until human control is released." in detail.data
     assert b"AI activity timeline" in detail.data
+
+
+def test_ticket_detail_renders_human_approved_label_overlay(client):
+    store = client.application.extensions["ticketmind_state"]
+    store.set_ticket_ai_override(
+        "2",
+        {"Ticket Type": "Technical issue", "Ticket Priority": "High"},
+    )
+
+    response = client.get("/tickets/2")
+
+    assert response.status_code == 200
+    assert b"Opslyra label overlay" in response.data
+    assert b"Human-approved labels saved locally. The source dataset remains unchanged." in response.data
+    assert b"Category: Technical issue" in response.data
+    assert b"Priority: High" in response.data
 
 
 def test_dry_run_preview_has_no_persistent_side_effects(client):

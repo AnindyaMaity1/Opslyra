@@ -46,6 +46,19 @@ def test_grouped_split_keeps_normalized_duplicate_text_together():
     assert set(groups[train_idx]).isdisjoint(set(groups[test_idx]))
 
 
+def test_grouped_split_falls_back_to_group_assignments_for_small_datasets():
+    labels = np.array(["billing", "technical"] * 3)
+    groups = np.repeat([1, 2, 3], 2)
+
+    split = stratified_group_holdout_indices(labels, groups, 0.25, 5)
+
+    assert split is not None
+    train_idx, test_idx = split
+    assert set(labels[train_idx]) == set(labels)
+    assert set(labels[test_idx]) == set(labels)
+    assert set(groups[train_idx]).isdisjoint(set(groups[test_idx]))
+
+
 def test_text_accuracy_comparison_reports_grouped_majority_baseline():
     frame = three_class_frame(rows_per_class=15)
     result = _cv_signal(

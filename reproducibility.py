@@ -62,31 +62,63 @@ def stratified_group_holdout_indices(
     if not np.isfinite(test_fraction) or not 0 < test_fraction < 1:
         raise ValueError("test_fraction must be between 0 and 1.")
     n_splits = max(2, int(round(1.0 / test_fraction)))
-    if len(np.unique(group_values)) < n_splits:
-        return None
-
     classes = set(label_values)
-    splitter = StratifiedGroupKFold(
-        n_splits=n_splits,
-        shuffle=True,
-        random_state=seed,
-    )
-    candidates = []
-    for train_idx, test_idx in splitter.split(
-        np.zeros((len(label_values), 1)),
-        label_values,
-        group_values,
-    ):
-        train_classes = set(label_values[train_idx])
-        test_classes = set(label_values[test_idx])
-        if train_classes != classes or test_classes != classes:
-            continue
-        fraction_error = abs(len(test_idx) / len(label_values) - test_fraction)
-        candidates.append((fraction_error, train_idx, test_idx))
-    if not candidates:
-        return None
-    _, train_idx, test_idx = min(candidates, key=lambda item: item[0])
-    return train_idx, test_idx
+    unique_groups = np.unique(group_values)
+    if len(unique_groups) >= n_splits:
+        splitter = StratifiedGroupKFold(
+            n_splits=n_splits,
+            shuffle=True,
+            random_state=seed,
+        )
+        candidates = []
+        for train_idx, test_idx in splitter.split(
+            np.zeros((len(label_values), 1)),
+            label_values,
+            group_values,
+        ):
+            if (
+                set(label_values[train_idx]) != classes
+                or set(label_values[test_idx]) != classes
+            ):
+                continue
+            fraction_error = abs(
+                len(test_idx) / len(label_values) - test_fraction
+            )
+            candidates.append((fraction_error, train_idx, test_idx))
+        if candidates:
+            _, train_idx, test_idx = min(candidates, key=lambda item: item[0])
+            return train_idx, test_idx
+
+    rng = np.random.default_rng(seed)
+    shuffled_groups = unique_groups.copy()
+    rng.shuffle(shuffled_groups)
+    if len(shuffled_groups) <= 16:
+        best_candidate = None
+        for mask in range(1, (1 << len(shuffled_groups)) - 1):
+            test_groups = [
+                shuffled_groups[index]
+                for index in range(len(shuffled_groups))
+                if mask & (1 << index)
+            ]
+            test_mask = np.isin(group_values, test_groups)
+            test_idx = np.flatnonzero(test_mask)
+            train_idx = np.flatnonzero(~test_mask)
+            if not len(train_idx) or not len(test_idx):
+                continue
+            if (
+                set(label_values[train_idx]) != classes
+                or set(label_values[test_idx]) != classes
+            ):
+                continue
+            fraction_error = abs(
+                len(test_idx) / len(label_values) - test_fraction
+            )
+            if best_candidate is None or fraction_error < best_candidate[0]:
+                best_candidate = (fraction_error, train_idx, test_idx)
+        if best_candidate is not None:
+            _, train_idx, test_idx = best_candidate
+            return train_idx, test_idx
+    return None
 
 
 def dataset_fingerprint(frame: pd.DataFrame, path: str | Path | None = None) -> dict[str, Any]:
