@@ -15,9 +15,9 @@
   <div class="overview-focus-card">
     <div class="overview-focus-top"><span>OPEN · HIGH PRIORITY</span><span class="overview-focus-icon" aria-hidden="true">✳</span></div>
     <div class="overview-focus-count">{{ "{:,}".format(urgent_open_count) }}</div>
-    <p>Critical and High tickets to review</p>
-    <div class="overview-focus-track"><span style="width: {{ active_percent }}%"></span></div>
-    <div class="overview-focus-foot"><span>{{ "{:,}".format(active_count) }} active in this dataset</span><span>{{ active_percent }}%</span></div>
+    <p>Critical and High tickets currently Open</p>
+    <div class="overview-focus-track" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ metrics.progress.value }}" aria-label="{{ metrics.progress.metric }}"><span style="width: {{ metrics.progress.value }}%"></span></div>
+    <div class="overview-focus-foot"><span>{{ "{:,}".format(metrics.progress.numerator) }} of {{ "{:,}".format(metrics.progress.denominator) }} open tickets</span><span>{{ metrics.progress.value }}%</span></div>
   </div>
 </section>
 
@@ -82,19 +82,19 @@
 
   <article class="panel overview-distribution-panel">
     <div class="overview-section-head">
-      <div><div class="overview-section-kicker">WHAT'S COMING IN</div><h2>Issue categories</h2><p>Ticket types in the full dataset</p></div>
+      <div><div class="overview-section-kicker">WHAT'S COMING IN</div><h2>Issue categories</h2><p>Share of labeled ticket-type records (missing types excluded from the denominator)</p></div>
       <a class="text-link" href="{{ url_for('tickets') }}">Browse <span aria-hidden="true">→</span></a>
     </div>
     <div class="overview-category-list">
-      {% for item in profile.targets["Ticket Type"] %}
-      {% set share = (item.count / profile.row_count * 100)|round(1) %}
+      {% for item in metrics["ticket_type"]["items"] %}
+      {% set share = item.pct_of_labeled %}
       <article class="overview-category-card category-card-{{ loop.index }}">
-        <span class="overview-category-orbit" style="--share: {{ share }}%" role="img" aria-label="{{ share }} percent of tickets">
+        <span class="overview-category-orbit" style="--share: {{ share }}%" role="img" aria-label="{{ item.label }}: {{ item.count }} tickets, {{ share }} percent of labeled types">
           <span class="overview-category-orbit-label">{{ "%.0f"|format(share) }}%</span>
         </span>
         <div class="overview-category-copy">
           <strong>{{ item.label }}</strong>
-          <span class="overview-category-count">{{ "{:,}".format(item.count) }} tickets</span>
+          <span class="overview-category-count">{{ "{:,}".format(item.count) }} tickets · {{ share }}% of labeled</span>
         </div>
       </article>
       {% else %}
@@ -108,12 +108,12 @@
 <section class="overview-lower-grid">
   <article class="panel overview-breakdown-panel">
     <div class="overview-section-head">
-      <div><div class="overview-section-kicker">QUEUE COMPOSITION</div><h2>Priority mix</h2><p>Recorded priority across all tickets</p></div>
+      <div><div class="overview-section-kicker">QUEUE COMPOSITION</div><h2>Priority mix</h2><p>Share of labeled priority records</p></div>
       <span class="overview-mini-icon metric-red">!</span>
     </div>
     <div class="overview-priority-list">
-      {% for item in profile.targets["Ticket Priority"] %}
-      {% set share = (item.count / profile.row_count * 100)|round(1) %}
+      {% for item in metrics["ticket_priority"]["items"] %}
+      {% set share = item.pct_of_labeled %}
       <article class="overview-priority-card priority-card-{{ item.label|lower|replace(' ', '-') }}">
         <div class="overview-priority-card-top"><span class="overview-priority-glyph" aria-hidden="true">{% if item.label|lower == "critical" %}!!{% elif item.label|lower == "high" %}↑{% elif item.label|lower == "medium" %}·{% else %}↓{% endif %}</span><span>{{ "%.1f"|format(share) }}%</span></div>
         <strong>{{ "{:,}".format(item.count) }}</strong>
@@ -126,12 +126,12 @@
   </article>
   <article class="panel overview-breakdown-panel">
     <div class="overview-section-head">
-      <div><div class="overview-section-kicker">WORKFLOW</div><h2>Status breakdown</h2><p>What the dataset says about ticket state</p></div>
+      <div><div class="overview-section-kicker">WORKFLOW</div><h2>Status breakdown</h2><p>Share of labeled status records</p></div>
       <span class="overview-mini-icon metric-blue">◷</span>
     </div>
     <div class="overview-status-list">
-      {% for item in profile.targets["Ticket Status"] %}
-      {% set share = (item.count / profile.row_count * 100)|round(1) %}
+      {% for item in metrics["ticket_status"]["items"] %}
+      {% set share = item.pct_of_labeled %}
       <article class="overview-status-card status-card-{{ item.label|lower|replace(' ', '-') }}">
         <div class="overview-status-ring" style="--share: {{ share }}%" role="img" aria-label="{{ item.label }}: {{ item.count }} tickets, {{ share }} percent">
           <span>{{ "{:,}".format(item.count) }}</span>
@@ -157,5 +157,5 @@
     <a class="overview-inline-link" href="{{ url_for('data_quality') }}">Review data quality <span aria-hidden="true">→</span></a>
   </article>
 </section>
-<p class="overview-data-note">Snapshot from the connected CSV · Queue labels are descriptive and are not live workload or SLA measurements.</p>
+<p class="overview-data-note">{{ dataset_label }} · Category percentages use labeled records as the denominator · The hero progress bar is {{ metrics.progress.metric | lower }} · Queue labels are not live SLA measurements.</p>
 {% endblock %}

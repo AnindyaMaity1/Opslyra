@@ -246,6 +246,9 @@ class StateStore:
                 return {"mode": "manual", "policy": policy}
         policy = DEFAULT_POLICY.copy()
         policy.update(json.loads(row["policy_json"]))
+        policy.pop("confidence_threshold", None)
+        if policy.get("selection_mode") not in {"target_coverage", "target_risk"}:
+            policy["selection_mode"] = DEFAULT_POLICY["selection_mode"]
         return {"mode": str(row["mode"]), "policy": policy}
 
     def set_workspace_ai_mode(self, mode: str) -> None:
@@ -263,9 +266,14 @@ class StateStore:
             )
 
     def set_adaptive_policy(self, policy: dict[str, Any]) -> None:
+        from adaptive import DEFAULT_POLICY
+
         settings = self.adaptive_settings()
         merged = settings["policy"].copy()
         merged.update(policy)
+        merged.pop("confidence_threshold", None)
+        if merged.get("selection_mode") not in {"target_coverage", "target_risk"}:
+            merged["selection_mode"] = DEFAULT_POLICY["selection_mode"]
         with self.connect() as connection:
             connection.execute(
                 """
@@ -458,6 +466,17 @@ class StateStore:
                 ORDER BY id DESC LIMIT ?
                 """,
                 (ticket_id, limit),
+            ).fetchall()
+        return [self._activity_record(row) for row in rows]
+
+    def all_ai_activity(self, limit: int = 500) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM ai_activity
+                ORDER BY id DESC LIMIT ?
+                """,
+                (limit,),
             ).fetchall()
         return [self._activity_record(row) for row in rows]
 

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from reproducibility import (
+    EXCLUDED_PREDICTION_COLUMNS,
+    PERMITTED_METADATA_COLUMNS,
+    PERMITTED_TEXT_COLUMNS,
+    dataset_fingerprint,
+)
 
 
 REQUIRED_COLUMNS = [
@@ -26,6 +34,32 @@ REQUIRED_COLUMNS = [
     "Time to Resolution",
     "Customer Satisfaction Rating",
 ]
+
+KAGGLE_DATASET_PROVENANCE = {
+    "source_kind": "kaggle",
+    "source": "customer_support_tickets.csv",
+    "label": "Kaggle Dataset",
+    "note": (
+        "The dataset is identified by the project owner as sourced from Kaggle. "
+        "The exact Kaggle listing, citation, license, and label-verification evidence "
+        "have not yet been recorded in this repository."
+    ),
+    "license": "Not recorded; verify the Kaggle listing's terms before redistribution or reuse.",
+    "retrieval_date": None,
+    "citation": None,
+    "labels_verified": False,
+    "timestamps_trustworthy": False,
+}
+
+EXTERNAL_DATASET_PROVENANCE_TEMPLATE = {
+    "source_kind": "external",
+    "label": "External dataset",
+    "note": "Record source URL, license, retrieval date, and permitted use before research claims.",
+    "labels_verified": False,
+    "timestamps_trustworthy": False,
+}
+
+DEFAULT_DATASET_PATH = Path(__file__).resolve().with_name("customer_support_tickets.csv")
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 PHONE_PATTERN = re.compile(r"(?<!\w)(?:\+?\d[\d\s().-]{7,}\d)(?!\w)")
@@ -71,6 +105,79 @@ def redact_with_audit(value: Any) -> tuple[str, dict[str, int]]:
     return text, counts
 
 
+def _provenance_for_path(dataset_path: Path) -> dict[str, Any]:
+    sidecar = dataset_path.with_suffix(dataset_path.suffix + ".provenance.json")
+    if sidecar.is_file():
+        try:
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise DatasetError(f"Could not read dataset provenance sidecar: {error}") from error
+        if not isinstance(payload, dict):
+            raise DatasetError("Dataset provenance sidecar must contain a JSON object.")
+        for field in ("labels_verified", "timestamps_trustworthy"):
+            if field in payload and not isinstance(payload[field], bool):
+                raise DatasetError(f"Provenance field {field!r} must be a boolean.")
+        provenance = EXTERNAL_DATASET_PROVENANCE_TEMPLATE.copy()
+        provenance.update(payload)
+        provenance.setdefault("source", dataset_path.name)
+        return provenance
+    if dataset_path.resolve() == DEFAULT_DATASET_PATH.resolve():
+        provenance = KAGGLE_DATASET_PROVENANCE.copy()
+        provenance["source"] = dataset_path.name
+        return provenance
+    provenance = EXTERNAL_DATASET_PROVENANCE_TEMPLATE.copy()
+    provenance["source"] = dataset_path.name
+    return provenance
+
+
+def validate_raw_frame(frame: pd.DataFrame) -> dict[str, Any]:
+    """Validate schema and quality without mutating values."""
+    issues: list[str] = []
+    missing_columns = [column for column in REQUIRED_COLUMNS if column not in frame.columns]
+    if missing_columns:
+        issues.append("missing columns: " + ", ".join(missing_columns))
+    duplicate_ids = (
+        int(frame["Ticket ID"].duplicated().sum()) if "Ticket ID" in frame.columns else None
+    )
+    if duplicate_ids:
+        issues.append(f"duplicate ticket IDs: {duplicate_ids}")
+    if "Ticket ID" in frame.columns:
+        missing_ids = int(frame["Ticket ID"].isna().sum())
+        if missing_ids:
+            issues.append(f"missing ticket IDs: {missing_ids}")
+    for column, low, high in (
+        ("Customer Age", None, None),
+        ("Customer Satisfaction Rating", 1, 5),
+    ):
+        if column not in frame.columns:
+            continue
+        values = pd.to_numeric(frame[column], errors="coerce")
+        invalid = frame[column].notna() & values.isna()
+        if low is not None and high is not None:
+            invalid |= values.notna() & ~values.between(low, high)
+        invalid_count = int(invalid.sum())
+        if invalid_count:
+            issues.append(f"invalid {column} values: {invalid_count}")
+    for column in ("Date of Purchase", "First Response Time", "Time to Resolution"):
+        if column not in frame.columns:
+            continue
+        present = frame[column].notna()
+        parsed = pd.to_datetime(frame.loc[present, column], errors="coerce")
+        invalid_count = int(parsed.isna().sum())
+        if invalid_count:
+            issues.append(f"unparseable {column} timestamps: {invalid_count}")
+    return {
+        "issues": issues,
+        "duplicate_ticket_ids": duplicate_ids,
+        "row_count": int(len(frame)),
+        "missing_by_column": {
+            column: int(frame[column].isna().sum())
+            for column in frame.columns
+        },
+        "data_types": {column: str(dtype) for column, dtype in frame.dtypes.items()},
+    }
+
+
 def load_dataset(path: str | Path) -> pd.DataFrame:
     dataset_path = Path(path)
     if not dataset_path.is_file():
@@ -95,9 +202,41 @@ def load_dataset(path: str | Path) -> pd.DataFrame:
     if frame.empty:
         raise DatasetError("Dataset contains the expected columns but no ticket rows.")
 
+    # Keep a column-filtered copy. Blank strings become NA so missingness is
+    # explicit. No invented label or numeric fill is applied.
     frame = frame[REQUIRED_COLUMNS].copy()
     frame = frame.replace(r"^\s*$", pd.NA, regex=True)
+    provenance = _provenance_for_path(dataset_path)
+    frame.attrs["dataset_label"] = provenance.get("label", "External dataset")
+    frame.attrs["dataset_provenance"] = provenance
+    frame.attrs["dataset_path"] = str(dataset_path.resolve())
+    frame.attrs["dataset_fingerprint"] = dataset_fingerprint(frame, dataset_path)
+    frame.attrs["representation"] = "raw"
+    frame.attrs["excluded_prediction_columns"] = list(EXCLUDED_PREDICTION_COLUMNS)
+    frame.attrs["permitted_text_columns"] = list(PERMITTED_TEXT_COLUMNS)
+    frame.attrs["permitted_metadata_columns"] = list(PERMITTED_METADATA_COLUMNS)
     return frame
+
+
+def analysis_copy(frame: pd.DataFrame) -> pd.DataFrame:
+    """Copy for exploration. Labels remain missing; no imputation."""
+    copy = frame.copy()
+    copy.attrs.update(dict(frame.attrs))
+    copy.attrs["representation"] = "cleaned_for_analysis"
+    return copy
+
+
+def model_text_series(
+    frame: pd.DataFrame, field: str = "subject_description"
+) -> pd.Series:
+    """Model-ready text. Missing subject/description become empty strings for vectorizers."""
+    subjects = frame["Ticket Subject"].fillna("").map(redact_sensitive_text)
+    descriptions = frame["Ticket Description"].fillna("").map(redact_sensitive_text)
+    if field == "subject":
+        return subjects.str.strip()
+    if field == "description":
+        return descriptions.str.strip()
+    return (subjects + "\n" + descriptions).str.strip()
 
 
 def dataset_profile(frame: pd.DataFrame) -> dict[str, Any]:
@@ -106,9 +245,15 @@ def dataset_profile(frame: pd.DataFrame) -> dict[str, Any]:
         frame["Customer Satisfaction Rating"], errors="coerce"
     )
     age_values = pd.to_numeric(frame["Customer Age"], errors="coerce")
+    provenance = dict(frame.attrs.get("dataset_provenance", KAGGLE_DATASET_PROVENANCE))
+    validation = validate_raw_frame(frame)
     profile: dict[str, Any] = {
         "row_count": int(len(frame)),
         "column_count": int(len(frame.columns)),
+        "dataset_label": frame.attrs.get(
+            "dataset_label", provenance.get("label", "External dataset")
+        ),
+        "dataset_provenance": provenance,
         "duplicate_ticket_ids": int(frame["Ticket ID"].duplicated().sum()),
         "missing_total": int(missing_values.sum()),
         "missing_values": {
@@ -137,6 +282,13 @@ def dataset_profile(frame: pd.DataFrame) -> dict[str, Any]:
                 ),
             },
         },
+        "representation": frame.attrs.get("representation", "raw"),
+        "fingerprint": frame.attrs.get("dataset_fingerprint"),
+        "validation_issues": validation["issues"],
+        "timestamps_trustworthy": provenance.get("timestamps_trustworthy") is True,
+        "excluded_prediction_columns": list(
+            frame.attrs.get("excluded_prediction_columns", EXCLUDED_PREDICTION_COLUMNS)
+        ),
         "closed_count": int(
             frame["Ticket Status"].astype("string").str.casefold().eq("closed").sum()
         ),
@@ -175,6 +327,4 @@ def dataset_profile(frame: pd.DataFrame) -> dict[str, Any]:
 
 
 def ticket_text(frame: pd.DataFrame) -> pd.Series:
-    subjects = frame["Ticket Subject"].fillna("").map(redact_sensitive_text)
-    descriptions = frame["Ticket Description"].fillna("").map(redact_sensitive_text)
-    return (subjects + "\n" + descriptions).str.strip()
+    return model_text_series(frame, "subject_description")

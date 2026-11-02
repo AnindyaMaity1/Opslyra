@@ -7,6 +7,7 @@
 </section>
 <section class="predict-layout">
   <form class="panel prediction-form" method="post">
+    <input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
     <div class="panel-heading"><div><h2>Ticket text</h2><p>Text is scrubbed for email addresses and phone-like numbers before inference.</p></div><span class="panel-chip">TEXT ONLY</span></div>
     <label for="subject">Subject <span class="optional-label">optional</span></label>
     <input id="subject" name="subject" maxlength="500" value="{{ subject }}" placeholder="e.g. Cannot connect to my account">
@@ -22,13 +23,31 @@
       {% for target, result in results.items() %}
       <div class="prediction-result">
         <span class="prediction-target">{{ target }}</span>
+        {% if result.abstained %}
+        <strong>UNKNOWN / abstain</strong>
+        <p class="prediction-abstain">The configured open-set policy rejected a known-class assignment. Closed-set guess: {{ result.predicted_class }}.</p>
+        {% else %}
         <strong>{{ result.label }}</strong>
+        {% endif %}
+        {% if result.supports_probabilities and result.score is not none %}
         <div class="confidence-track"><span style="width: {{ (result.score * 100)|round(1) }}%"></span></div>
-        <small>Maximum class probability: {{ "%.1f"|format(result.score * 100) }}% · uncalibrated</small>
+        <small>Confidence (max class probability): {{ "%.1f"|format(result.score * 100) }}% · sum {{ "%.3f"|format(result.probability_sum) }} · uncalibrated</small>
+        <ul class="probability-list">
+          {% for label, probability in result.probabilities.items() %}
+          <li><span>{{ label }}</span><strong>{{ "%.1f"|format(probability * 100) }}%</strong></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <small>This estimator does not expose class probabilities.</small>
+        {% endif %}
+        {% if result.top_terms %}
+        <div class="term-list"><span>Top contributing terms</span>{% for term in result.top_terms %}<b>{{ term.term }}</b>{% endfor %}</div>
+        {% endif %}
+        <small>{{ result.explanation_warning }}</small>
       </div>
       {% endfor %}
     </div>
-    <div class="notice-box">Review before acting. These probabilities are not calibrated and do not represent causal explanations or a guarantee of correctness.</div>
+    <div class="notice-box">Review before acting. Highlighted terms are model-specific contributions, not causal explanations. Probabilities are uncalibrated unless a calibration experiment has been run.</div>
     {% else %}
     <div class="panel-heading"><div><h2>How it works</h2><p>A transparent baseline for exploration</p></div><span class="prediction-spark">✳</span></div>
     <div class="how-list">

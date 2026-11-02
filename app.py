@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import os
 import secrets
+import time
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -22,6 +25,7 @@ from flask import (
 )
 
 from adaptive import DEFAULT_POLICY, MODE_DETAILS, evaluate_ticket_workflow
+from dashboard import dashboard_metrics
 from data import (
     DatasetError,
     dataset_profile,
@@ -68,6 +72,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         MAX_CONTENT_LENGTH=16 * 1024 * 1024,
         STATE_DATABASE=str(ROOT / "instance" / "ticketmind.sqlite3"),
         MODEL_ARTIFACTS=str(ROOT / "instance" / "models"),
+        EXPERIMENTS_DIR=str(ROOT / "instance" / "experiments"),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
     )
@@ -92,6 +97,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         "fingerprint": None,
         "temporal": None,
     }
+    graphs_cache: dict[str, Any] = {"fingerprint": None, "data": None}
+    risk_threshold_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
 
     @app.context_processor
     def inject_adaptive_workspace():
@@ -100,10 +107,32 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             csrf_token = secrets.token_urlsafe(32)
             session["adaptive_csrf_token"] = csrf_token
         settings = store.adaptive_settings()
+        try:
+            dataset_frame = get_data()
+            dataset_label = dataset_frame.attrs.get(
+                "dataset_label", "Configured dataset"
+            )
+            dataset_provenance = dataset_frame.attrs.get(
+                "dataset_provenance",
+                {
+                    "label": "Configured dataset",
+                    "source_kind": "external",
+                    "note": "Dataset source provenance is not available.",
+                },
+            )
+        except DatasetError:
+            dataset_label = "Dataset unavailable"
+            dataset_provenance = {
+                "label": "Dataset unavailable",
+                "source_kind": "unavailable",
+                "note": "The configured dataset could not be loaded.",
+            }
         return {
             "adaptive_csrf_token": csrf_token,
             "workspace_ai_mode": settings["mode"],
             "ai_mode_details": MODE_DETAILS,
+            "dataset_label": dataset_label,
+            "dataset_provenance": dataset_provenance,
         }
 
     def get_data():
@@ -147,6 +176,45 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             research_cache["fingerprint"] = fingerprint
             research_cache["temporal"] = temporal_fingerprint_study(frame)
         return research_cache["temporal"]
+
+    def get_risk_thresholds(frame: pd.DataFrame, policy: dict[str, Any]):
+        from risk_coverage import select_validation_threshold
+
+        dataset_hash = frame.attrs.get("dataset_fingerprint", {}).get("sha256")
+        selection_mode = str(policy.get("selection_mode", "target_coverage"))
+        target_coverage = float(policy.get("target_coverage", DEFAULT_POLICY["target_coverage"]))
+        configured_target_risk = policy.get("target_risk")
+        target_risk = float(
+            0.1 if configured_target_risk is None else configured_target_risk
+        )
+        thresholds: dict[str, float] = {}
+        selections: dict[str, Any] = {}
+        for target in ("Ticket Type", "Ticket Priority"):
+            key = (
+                dataset_hash,
+                target,
+                selection_mode,
+                target_coverage,
+                target_risk,
+            )
+            if key not in risk_threshold_cache:
+                risk_threshold_cache[key] = select_validation_threshold(
+                    frame,
+                    target,
+                    selection_mode=selection_mode,
+                    target_coverage=target_coverage,
+                    target_risk=target_risk,
+                    max_rows=800,
+                    seed=0,
+                )
+            selection = risk_threshold_cache[key]
+            selections[target] = selection
+            thresholds[target] = (
+                float(selection["threshold"])
+                if selection.get("status") == "ok"
+                else 1.01
+            )
+        return thresholds, selections
 
     def ensure_models(force: bool = False):
         frame = get_data()
@@ -204,6 +272,34 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         models["estimators"], models["reports"] = estimators, reports
         models["fingerprint"] = fingerprint
 
+    def get_preview_estimators(frame: pd.DataFrame):
+        path = Path(app.config["DATASET_PATH"]).resolve()
+        stat = path.stat()
+        fingerprint = (str(path), stat.st_mtime_ns, stat.st_size)
+        if models["estimators"] is not None and models["fingerprint"] == fingerprint:
+            return models["estimators"]
+        active_version = next(
+            (item for item in store.model_versions() if item["active"]), None
+        )
+        if active_version:
+            artifact_path = Path(active_version["artifact_path"]).resolve()
+            artifact_root = Path(app.config["MODEL_ARTIFACTS"]).resolve()
+            if artifact_path.is_relative_to(artifact_root) and artifact_path.is_file():
+                artifact = joblib.load(artifact_path)
+                if artifact.get("dataset_fingerprint") == fingerprint:
+                    return artifact["estimators"]
+        estimators, _ = train_baselines(frame, store.corrections())
+        if not estimators:
+            raise ValueError(
+                "No target has enough labeled examples to train a model. "
+                "Add reviewed corrections or provide additional labels."
+            )
+        return estimators
+
+    def policy_fingerprint(policy: dict[str, Any]) -> str:
+        encoded = json.dumps(policy, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
     def record_redactions(*texts: str) -> None:
         totals: dict[str, int] = {}
         for text in texts:
@@ -214,8 +310,28 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     def csrf_is_valid() -> bool:
         expected = session.get("adaptive_csrf_token", "")
-        supplied = request.headers.get("X-CSRF-Token", "")
+        supplied = (
+            request.headers.get("X-CSRF-Token", "")
+            or request.form.get("csrf_token", "")
+        )
         return bool(expected and supplied and secrets.compare_digest(expected, supplied))
+
+    @app.before_request
+    def require_csrf_for_unsafe_methods():
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
+            return None
+        if request.endpoint == "static":
+            return None
+        if csrf_is_valid():
+            return None
+        if request.is_json or request.headers.get("X-CSRF-Token"):
+            return jsonify(
+                error="Your session token expired. Refresh the page and try again."
+            ), 403
+        flash("Your session token expired. Refresh the page and try again.", "error")
+        response = redirect(request.referrer or url_for("dashboard"))
+        response.status_code = 403
+        return response
 
     def json_object() -> dict[str, Any] | None:
         payload = request.get_json(silent=True)
@@ -286,31 +402,46 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     ),
                 }
             )
-        active_count = int(active_mask.sum())
+        metrics = dashboard_metrics(frame)
         return render_template(
             "dashboard.html",
             profile=profile,
-            active_count=active_count,
-            open_count=int(open_mask.sum()),
-            urgent_open_count=int((open_mask & urgent_mask).sum()),
-            waiting_count=int(
-                statuses.str.casefold().eq("pending customer response").sum()
-            ),
-            active_percent=(
-                round(active_count / len(frame) * 100) if len(frame) else 0
-            ),
+            metrics=metrics,
+            active_count=metrics["active_count"],
+            open_count=metrics["open_count"],
+            urgent_open_count=metrics["urgent_open_count"],
+            waiting_count=metrics["waiting_count"],
+            active_percent=metrics["progress"]["value"],
             attention_tickets=attention_tickets,
         )
 
     @app.route("/adaptive-ai")
     def adaptive_ai_page():
+        from risk_coverage import review_feedback_from_activity
+
+        frame = get_data()
         settings = store.adaptive_settings()
         workspace_activity = store.ai_activity("__workspace__", limit=15)
+        thresholds, threshold_selections = get_risk_thresholds(frame, settings["policy"])
+        ticket_options = [
+            {
+                "ticket_id": str(row["Ticket ID"]),
+                "subject": redact_sensitive_text(
+                    "" if pd.isna(row["Ticket Subject"]) else str(row["Ticket Subject"])
+                ),
+            }
+            for _, row in frame.head(100).iterrows()
+        ]
         return render_template(
             "adaptive_ai.html",
             modes=MODE_DETAILS,
             settings=settings,
             workspace_activity=workspace_activity,
+            profile=dataset_profile(frame),
+            threshold_selections=threshold_selections,
+            confidence_thresholds=thresholds,
+            review_metrics=review_feedback_from_activity(store.all_ai_activity()),
+            ticket_options=ticket_options,
         )
 
     @app.route("/api/adaptive-ai/mode", methods=["POST"])
@@ -350,21 +481,35 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         payload = json_object()
         if payload is None:
             return jsonify(error="A JSON object is required."), 400
-        try:
-            threshold = float(payload.get("confidence_threshold"))
-        except (TypeError, ValueError):
-            return jsonify(error="Enter a numeric score threshold between 0.50 and 0.99."), 400
-        if not math.isfinite(threshold) or not 0.50 <= threshold <= 0.99:
-            return jsonify(error="Score threshold must be between 0.50 and 0.99."), 400
         enabled_actions = payload.get("enabled_actions")
         if not isinstance(enabled_actions, list) or any(
             not isinstance(action, str) or action not in {"category", "priority"}
             for action in enabled_actions
         ):
             return jsonify(error="Only category and priority actions can be enabled."), 400
+        target_coverage = payload.get("target_coverage", DEFAULT_POLICY["target_coverage"])
+        try:
+            target_coverage = float(target_coverage)
+        except (TypeError, ValueError):
+            return jsonify(error="Target coverage must be a number between 0.10 and 1.00."), 400
+        if not math.isfinite(target_coverage) or not 0.10 <= target_coverage <= 1.00:
+            return jsonify(error="Target coverage must be between 0.10 and 1.00."), 400
+        selection_mode = payload.get("selection_mode", "target_coverage")
+        if selection_mode not in {"target_coverage", "target_risk"}:
+            return jsonify(error="Selection mode must be target_coverage or target_risk."), 400
+        target_risk = payload.get("target_risk", DEFAULT_POLICY["target_risk"] or 0.1)
+        try:
+            target_risk = float(target_risk)
+        except (TypeError, ValueError):
+            return jsonify(error="Target selective risk must be a number between 0 and 1."), 400
+        if not math.isfinite(target_risk) or not 0.0 <= target_risk <= 1.0:
+            return jsonify(error="Target selective risk must be between 0 and 1."), 400
         policy = {
-            "confidence_threshold": threshold,
             "enabled_actions": sorted(set(enabled_actions)),
+            "selection_mode": selection_mode,
+            "target_coverage": target_coverage,
+            "target_risk": target_risk,
+            "simulation_mode": True,
         }
         store.set_adaptive_policy(policy)
         settings = store.adaptive_settings()
@@ -378,7 +523,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         )
         return jsonify(
             policy=policy,
-            note="Scores are uncalibrated model outputs, not calibrated probabilities.",
+            note=(
+                "Per-target cut-offs are selected from validation risk–coverage curves. "
+                "Scores are uncalibrated model outputs, not calibrated probabilities."
+            ),
         )
 
     @app.route("/api/tickets/<ticket_id>/adaptive-mode", methods=["POST"])
@@ -424,44 +572,66 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             ),
         )
 
-    @app.route("/api/tickets/<ticket_id>/ai/recommend", methods=["POST"])
-    def recommend_ticket_actions(ticket_id: str):
-        if not csrf_is_valid():
-            return jsonify(error="Your session token expired. Refresh the page and try again."), 403
-        if json_object() is None:
-            return jsonify(error="A JSON object is required."), 400
+    def _ticket_predictions_and_workflow(
+        ticket_id: str,
+        dry_run: bool,
+        mode_override: str | None = None,
+    ):
         frame = get_data()
         row = ticket_row(frame, ticket_id)
         if row is None:
-            return jsonify(error="Ticket was not found."), 404
-        mode = effective_ticket_mode(ticket_id)
+            return None, (jsonify(error="Ticket was not found."), 404)
+        mode = mode_override or effective_ticket_mode(ticket_id)
         if mode in {"manual", "takeover"}:
-            return jsonify(
-                error=f"AI actions are paused in {MODE_DETAILS[mode]['label']} mode."
-            ), 409
-        idempotency_key = request.headers.get("Idempotency-Key", "")
-        if not 8 <= len(idempotency_key) <= 100:
-            return jsonify(error="A valid Idempotency-Key header is required."), 400
+            return None, (
+                jsonify(
+                    error=f"AI actions are paused in {MODE_DETAILS[mode]['label']} mode."
+                ),
+                409,
+            )
         try:
-            ensure_models()
+            if dry_run:
+                workflow_estimators = get_preview_estimators(frame)
+            else:
+                ensure_models()
+                workflow_estimators = models["estimators"]
         except ValueError as error:
             app.logger.exception("Could not prepare models for adaptive ticket workflow")
-            return jsonify(error=str(error)), 503
+            return None, (jsonify(error=str(error)), 503)
         subject = "" if pd.isna(row["Ticket Subject"]) else str(row["Ticket Subject"])
         description = (
             "" if pd.isna(row["Ticket Description"]) else str(row["Ticket Description"])
         )
-        record_redactions(subject, description)
+        if not dry_run:
+            record_redactions(subject, description)
         safe_subject = redact_sensitive_text(subject)
         safe_description = redact_sensitive_text(description)
         safe_text = f"{safe_subject}\n{safe_description}".strip()
-        predictions = predict_ticket(models["estimators"], safe_subject, safe_description)
         settings = store.adaptive_settings()
+        policy = settings["policy"]
+        predictions = predict_ticket(
+            workflow_estimators,
+            safe_subject,
+            safe_description,
+            open_set_threshold=float(policy.get("open_set_threshold") or 0) or None,
+            open_set_method=str(
+                policy.get("open_set_method", "maximum_softmax_probability")
+            ),
+        )
+        workflow_policy = dict(policy)
+        threshold_selections = {}
+        if mode in {"selective", "autonomous"}:
+            confidence_thresholds, threshold_selections = get_risk_thresholds(
+                frame, policy
+            )
+            workflow_policy["confidence_thresholds"] = confidence_thresholds
+            workflow_policy["threshold_selections"] = threshold_selections
         workflow = evaluate_ticket_workflow(
             mode,
             predictions,
-            settings["policy"],
+            workflow_policy,
             safe_text,
+            dry_run=dry_run,
         )
         similar_cases = nearest_tickets(
             frame,
@@ -481,7 +651,125 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 else ""
             ),
             "score_note": "Model scores are uncalibrated and should not be read as probabilities.",
+            "threshold_selections": threshold_selections,
+            "dry_run": dry_run,
         }
+        return {
+            "frame": frame,
+            "mode": mode,
+            "predictions": predictions,
+            "workflow": workflow,
+            "similar_cases": similar_cases,
+            "details": details,
+            "settings": settings,
+        }, None
+
+    @app.route("/api/tickets/<ticket_id>/ai/dry-run", methods=["POST"])
+    def dry_run_ticket_actions(ticket_id: str):
+        if not csrf_is_valid():
+            return jsonify(error="Your session token expired. Refresh the page and try again."), 403
+        if json_object() is None:
+            return jsonify(error="A JSON object is required."), 400
+        payload, error_response = _ticket_predictions_and_workflow(ticket_id, dry_run=True)
+        if error_response is not None:
+            return error_response
+        settings = payload["settings"]
+        preview_id = secrets.token_urlsafe(32)
+        fingerprint = payload["frame"].attrs.get("dataset_fingerprint", {})
+        session["ai_workflow_preview"] = {
+            "id": preview_id,
+            "ticket_id": ticket_id,
+            "mode": payload["mode"],
+            "policy_fingerprint": policy_fingerprint(settings["policy"]),
+            "dataset_fingerprint": fingerprint.get("sha256"),
+            "created_at": time.time(),
+        }
+        return jsonify(
+            dry_run=True,
+            side_effects=False,
+            preview_id=preview_id,
+            ticket_id=ticket_id,
+            mode=payload["mode"],
+            mode_label=MODE_DETAILS[payload["mode"]]["label"],
+            workflow=payload["workflow"],
+            predictions=payload["predictions"],
+            similar_cases=payload["similar_cases"],
+            policy=payload["settings"]["policy"],
+            message="Dry-run preview only. No overlay, audit event, or external action was written.",
+        )
+
+    @app.route("/api/tickets/<ticket_id>/ai/policy-preview", methods=["POST"])
+    def preview_ticket_policy(ticket_id: str):
+        if not csrf_is_valid():
+            return jsonify(error="Your session token expired. Refresh the page and try again."), 403
+        if json_object() is None:
+            return jsonify(error="A JSON object is required."), 400
+        payload, error_response = _ticket_predictions_and_workflow(
+            ticket_id,
+            dry_run=True,
+            mode_override="selective",
+        )
+        if error_response is not None:
+            return error_response
+        return jsonify(
+            dry_run=True,
+            side_effects=False,
+            ticket_id=ticket_id,
+            mode="selective",
+            mode_label=MODE_DETAILS["selective"]["label"],
+            workflow=payload["workflow"],
+            predictions=payload["predictions"],
+            thresholds=payload["details"]["threshold_selections"],
+            policy=payload["settings"]["policy"],
+            message=(
+                "Policy preview only. No ticket, overlay, audit event, or external action was changed."
+            ),
+        )
+
+    @app.route("/api/tickets/<ticket_id>/ai/recommend", methods=["POST"])
+    def recommend_ticket_actions(ticket_id: str):
+        if not csrf_is_valid():
+            return jsonify(error="Your session token expired. Refresh the page and try again."), 403
+        body = json_object()
+        if body is None:
+            return jsonify(error="A JSON object is required."), 400
+        idempotency_key = request.headers.get("Idempotency-Key", "")
+        if not 8 <= len(idempotency_key) <= 100:
+            return jsonify(error="A valid Idempotency-Key header is required."), 400
+        preview_id = body.get("preview_id")
+        preview = session.get("ai_workflow_preview")
+        completed_preview = session.get("ai_workflow_completed_preview")
+        retrying_completed_request = (
+            isinstance(completed_preview, dict)
+            and completed_preview.get("ticket_id") == ticket_id
+            and completed_preview.get("preview_id") == preview_id
+            and completed_preview.get("idempotency_key") == idempotency_key
+        )
+        settings = store.adaptive_settings()
+        frame = get_data()
+        fingerprint = frame.attrs.get("dataset_fingerprint", {})
+        if not retrying_completed_request and (
+            not isinstance(preview, dict)
+            or not isinstance(preview_id, str)
+            or not secrets.compare_digest(str(preview.get("id", "")), preview_id)
+            or preview.get("ticket_id") != ticket_id
+            or preview.get("mode") != effective_ticket_mode(ticket_id)
+            or preview.get("policy_fingerprint")
+            != policy_fingerprint(settings["policy"])
+            or preview.get("dataset_fingerprint") != fingerprint.get("sha256")
+            or not isinstance(preview.get("created_at"), (int, float))
+            or time.time() - preview["created_at"] > 300
+        ):
+            return jsonify(
+                error="Run a fresh dry-run preview for this ticket and policy before proceeding."
+            ), 409
+        if not retrying_completed_request:
+            session.pop("ai_workflow_preview", None)
+        payload, error_response = _ticket_predictions_and_workflow(ticket_id, dry_run=False)
+        if error_response is not None:
+            return error_response
+        mode = payload["mode"]
+        workflow = payload["workflow"]
         if mode == "copilot":
             activity_status = "pending_approval"
             event_type = "recommendation"
@@ -493,20 +781,25 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             mode,
             event_type,
             activity_status,
-            details,
+            payload["details"],
             idempotency_key,
         )
         if activity is None:
             return jsonify(
                 error="The ticket mode changed while the workflow was running. No action was applied."
             ), 409
+        session["ai_workflow_completed_preview"] = {
+            "ticket_id": ticket_id,
+            "preview_id": preview_id,
+            "idempotency_key": idempotency_key,
+        }
         return jsonify(
             activity=activity,
             mode=mode,
             mode_label=MODE_DETAILS[mode]["label"],
             workflow=workflow,
-            predictions=predictions,
-            similar_cases=similar_cases,
+            predictions=payload["predictions"],
+            similar_cases=payload["similar_cases"],
         )
 
     @app.route(
@@ -706,8 +999,18 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 if models["estimators"]:
                     safe_subject = redact_sensitive_text(subject)
                     safe_description = redact_sensitive_text(description)
+                    policy = store.adaptive_settings()["policy"]
                     results = predict_ticket(
-                        models["estimators"], safe_subject, safe_description
+                        models["estimators"],
+                        safe_subject,
+                        safe_description,
+                        open_set_threshold=float(policy.get("open_set_threshold") or 0)
+                        or None,
+                        open_set_method=str(
+                            policy.get(
+                                "open_set_method", "maximum_softmax_probability"
+                            )
+                        ),
                     )
         return render_template(
             "predict.html",
@@ -942,8 +1245,57 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             model_ready=models["estimators"] is not None,
         )
 
+    @app.route("/graphs")
+    def graphs_page():
+        from dataset_audit import accuracy_comparison_report, duplicate_text_analysis
+        from evaluation import calibration_study
+
+        frame = get_data()
+        path = Path(app.config["DATASET_PATH"]).resolve()
+        stat = path.stat()
+        fingerprint = (str(path), stat.st_mtime_ns, stat.st_size)
+        if graphs_cache["fingerprint"] != fingerprint:
+            graphs_cache["data"] = {
+                "signals": accuracy_comparison_report(frame),
+                "duplicates": duplicate_text_analysis(frame),
+                "experiments": {},
+            }
+            graphs_cache["fingerprint"] = fingerprint
+        target = request.args.get("target", "Ticket Priority")
+        if target not in {"Ticket Type", "Ticket Priority"}:
+            target = "Ticket Priority"
+        experiments = graphs_cache["data"]["experiments"]
+        if target not in experiments:
+            experiments[target] = {
+                "calibration": calibration_study(
+                    frame, target=target, max_rows=500, seed=42
+                ),
+            }
+        return render_template(
+            "graphs.html",
+            profile=dataset_profile(frame),
+            signals=graphs_cache["data"]["signals"],
+            signals_ready=all(
+                result.get("status") == "ok"
+                for result in graphs_cache["data"]["signals"].values()
+            ),
+            duplicates=graphs_cache["data"]["duplicates"],
+            evaluation_target=target,
+            calibration=experiments[target]["calibration"],
+        )
+
     @app.route("/research", methods=["GET", "POST"])
     def research_page():
+        from annotation import annotation_status_note
+        from dataset_audit import audit_dataset
+        from evaluation import ablation_study, calibration_study, evaluate_models
+        from openset import run_open_set_experiment
+        from reproducibility import experiment_record, write_json
+        from risk_coverage import (
+            review_feedback_from_activity,
+            simulate_risk_coverage,
+        )
+
         frame = get_data()
         form_result: dict[str, Any] | None = None
         queue_weights = {
@@ -1026,20 +1378,131 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                             remaining_sla_hours,
                         ),
                     }
+                elif action == "evaluate":
+                    raw_seeds = request.form.get("seeds", "0,1,2")
+                    try:
+                        seeds = tuple(int(value.strip()) for value in raw_seeds.split(","))
+                    except ValueError as error:
+                        raise ValueError("Seeds must be comma-separated integers.") from error
+                    if not seeds or len(seeds) > 20 or len(set(seeds)) != len(seeds):
+                        raise ValueError("Provide 1–20 unique random seeds.")
+                    target = request.form.get("target", "Ticket Type")
+                    if target not in {"Ticket Type", "Ticket Priority"}:
+                        raise ValueError("Choose Ticket Type or Ticket Priority.")
+                    form_result = {
+                        "action": action,
+                        "data": evaluate_models(
+                            frame,
+                            target=target,
+                            seeds=seeds,
+                            n_splits=3,
+                            max_rows=240,
+                        ),
+                    }
+                elif action == "openset":
+                    raw_seeds = request.form.get(
+                        "seeds", ",".join(str(seed) for seed in range(10))
+                    )
+                    try:
+                        seeds = tuple(int(value.strip()) for value in raw_seeds.split(","))
+                    except ValueError as error:
+                        raise ValueError("Seeds must be comma-separated integers.") from error
+                    if not seeds or len(seeds) > 20 or len(set(seeds)) != len(seeds):
+                        raise ValueError("Provide 1–20 unique random seeds.")
+                    target = request.form.get("target", "Ticket Type")
+                    if target not in {"Ticket Type", "Ticket Priority"}:
+                        raise ValueError("Choose Ticket Type or Ticket Priority.")
+                    raw_unknown = request.form.get("unknown_classes", "").strip()
+                    unknown_classes = [
+                        label.strip()
+                        for label in raw_unknown.split(",")
+                        if label.strip()
+                    ] or None
+                    form_result = {
+                        "action": action,
+                        "data": run_open_set_experiment(
+                            frame,
+                            target=target,
+                            seeds=seeds,
+                            unknown_classes=unknown_classes,
+                            max_rows=600,
+                        ),
+                    }
+                elif action == "audit":
+                    form_result = {"action": action, "data": audit_dataset(frame)}
+                elif action == "ablation":
+                    form_result = {
+                        "action": action,
+                        "data": {
+                            "ablation": ablation_study(frame, max_rows=220),
+                            "calibration": calibration_study(frame, max_rows=220),
+                        },
+                    }
+                elif action == "risk-coverage":
+                    coverage = request.form.get("coverage", default=0.6, type=float)
+                    if coverage is None or not 0.1 <= coverage <= 1.0:
+                        raise ValueError("Coverage must be between 0.1 and 1.0.")
+                    selection_mode = request.form.get("selection_mode", "target_coverage")
+                    if selection_mode not in {"target_coverage", "target_risk"}:
+                        raise ValueError("Choose target coverage or target selective risk.")
+                    target_risk = request.form.get("target_risk", default=0.1, type=float)
+                    if target_risk is None or not 0.0 <= target_risk <= 1.0:
+                        raise ValueError("Target risk must be between 0 and 1.")
+                    form_result = {
+                        "action": action,
+                        "data": simulate_risk_coverage(
+                            frame,
+                            target_coverage=coverage,
+                            target_risk=target_risk,
+                            selection_mode=selection_mode,
+                            max_rows=240,
+                        ),
+                    }
             except (ValueError, TypeError) as error:
                 app.logger.exception("Research workflow failed")
                 flash(str(error), "error")
 
-        try:
-            ensure_models()
-        except ValueError as error:
-            app.logger.exception("Could not train models for research workflows")
-            flash(str(error), "error")
+            report_names = {
+                "evaluate": "evaluation",
+                "openset": "openset",
+                "audit": "dataset_audit",
+                "ablation": "ablation",
+                "risk-coverage": "risk_coverage",
+            }
+            if (
+                form_result
+                and form_result.get("action") in report_names
+                and "data" in form_result
+            ):
+                report_name = report_names[form_result["action"]]
+                report_path = Path(app.config["EXPERIMENTS_DIR"]) / f"{report_name}.json"
+                config = {
+                    key: value
+                    for key, value in request.form.items()
+                    if key not in {"csrf_token", "action"}
+                }
+                write_json(
+                    report_path,
+                    experiment_record(
+                        report_name,
+                        config,
+                        form_result["data"],
+                        frame.attrs.get("dataset_fingerprint", {}),
+                        report_path,
+                    ),
+                )
+
         queue = (
             form_result["queue"]
             if form_result and form_result["action"] == "queue"
             else active_learning_queue(frame, models["estimators"] or {}, queue_weights)
         )
+        experiment_snapshots = {}
+        output_dir = ROOT / "instance" / "experiments"
+        for name in ("evaluation", "openset", "dataset_audit", "ablation", "risk_coverage"):
+            path = output_dir / f"{name}.json"
+            experiment_snapshots[name] = path.is_file()
+        review_metrics = review_feedback_from_activity(store.all_ai_activity())
         return render_template(
             "research.html",
             active_learning=(
@@ -1052,6 +1515,34 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 if form_result and form_result["action"] == "routing-study"
                 else None
             ),
+            evaluation_result=(
+                form_result["data"]
+                if form_result and form_result["action"] == "evaluate"
+                else None
+            ),
+            openset_result=(
+                form_result["data"]
+                if form_result and form_result["action"] == "openset"
+                else None
+            ),
+            audit_result=(
+                form_result["data"]
+                if form_result and form_result["action"] == "audit"
+                else None
+            ),
+            ablation_result=(
+                form_result["data"]
+                if form_result and form_result["action"] == "ablation"
+                else None
+            ),
+            risk_result=(
+                form_result["data"]
+                if form_result and form_result["action"] == "risk-coverage"
+                else None
+            ),
+            annotation_status=annotation_status_note(),
+            experiment_snapshots=experiment_snapshots,
+            review_metrics=review_metrics,
             queue=queue,
             queue_weights=queue_weights,
             temporal=get_temporal_study(frame),

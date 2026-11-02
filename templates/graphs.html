@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Graphs{% endblock %}
+{% block breadcrumb %}Graphs{% endblock %}
+{% block content %}
+<section class="page-heading compact-heading">
+  <div>
+    <div class="eyebrow"><span class="eyebrow-line"></span> DATASET SIGNAL</div>
+    <h1>Graphs</h1>
+    <p class="subtitle">Check whether ticket text predicts priority and status better than a majority-class baseline.</p>
+  </div>
+</section>
+
+<section class="panel graph-panel" aria-labelledby="accuracy-heading">
+  <div class="panel-heading">
+    <div>
+      <h2 id="accuracy-heading">Cross-validated accuracy vs. majority baseline</h2>
+      <p>Ticket subject and description · {{ profile.row_count|int }} dataset rows</p>
+    </div>
+    <div class="graph-panel-actions">
+      <span class="panel-chip">3-FOLD GROUPED CV</span>
+      <button class="button button-secondary graph-download" type="button" data-chart-id="accuracy-chart" data-filename="cross-validated-accuracy" data-dpi="1200" data-width-inches="5.5">Download 1200-DPI PNG</button>
+      <span class="graph-download-status" role="status" aria-live="polite"></span>
+    </div>
+  </div>
+
+  {% if signals_ready %}
+  <div class="graph-legend" aria-hidden="true">
+    <span><i class="graph-key graph-key-model"></i> TF-IDF + logistic regression</span>
+    <span><i class="graph-key graph-key-baseline"></i> Majority baseline</span>
+  </div>
+  <div class="accuracy-chart-wrap">
+    <svg id="accuracy-chart" class="accuracy-chart" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 280" role="img" aria-labelledby="accuracy-chart-title accuracy-chart-description">
+      <title id="accuracy-chart-title">Cross-validated accuracy compared with the majority baseline</title>
+      <desc id="accuracy-chart-description">Grouped three-fold cross-validation accuracy for ticket priority and status. Exact normalized ticket text groups stay in a single fold.</desc>
+      {% for tick in [0, 25, 50, 75, 100] %}
+        {% set x = 170 + tick * 4.4 %}
+        <line x1="{{ x }}" y1="43" x2="{{ x }}" y2="235" class="accuracy-gridline"></line>
+        <text x="{{ x }}" y="260" class="accuracy-axis-label" text-anchor="middle">{{ tick }}%</text>
+      {% endfor %}
+      {% for target, signal in signals.items() %}
+        {% set y = 64 + loop.index0 * 92 %}
+        <text x="12" y="{{ y - 7 }}" class="accuracy-target">{{ target }}</text>
+        <text x="12" y="{{ y + 14 }}" class="accuracy-bar-label">Text model</text>
+        <rect x="170" y="{{ y }}" width="{{ (signal.tfidf_lr_accuracy * 440)|round(1) }}" height="19" rx="4" class="accuracy-bar-model"></rect>
+        <text x="{{ 178 + signal.tfidf_lr_accuracy * 440 }}" y="{{ y + 14 }}" class="accuracy-value">{{ "%.1f"|format(signal.tfidf_lr_accuracy * 100) }}%</text>
+        <text x="12" y="{{ y + 42 }}" class="accuracy-bar-label">Majority</text>
+        <rect x="170" y="{{ y + 28 }}" width="{{ (signal.majority_accuracy * 440)|round(1) }}" height="19" rx="4" class="accuracy-bar-baseline"></rect>
+        <text x="{{ 178 + signal.majority_accuracy * 440 }}" y="{{ y + 42 }}" class="accuracy-value">{{ "%.1f"|format(signal.majority_accuracy * 100) }}%</text>
+      {% endfor %}
+    </svg>
+  </div>
+  <div class="graph-table-wrap">
+    <table class="graph-table">
+      <caption>Fold-mean accuracy and dataset support</caption>
+      <thead><tr><th scope="col">Target</th><th scope="col">Labeled rows</th><th scope="col">Text groups</th><th scope="col">Text model</th><th scope="col">Majority</th><th scope="col">Difference</th></tr></thead>
+      <tbody>
+        {% for target, signal in signals.items() %}
+          <tr>
+            <th scope="row">{{ target }}</th>
+            <td>{{ signal.labeled_rows }}</td>
+            <td>{{ signal.distinct_text_groups }}</td>
+            <td>{{ "%.1f"|format(signal.tfidf_lr_accuracy * 100) }}%</td>
+            <td>{{ "%.1f"|format(signal.majority_accuracy * 100) }}%</td>
+            <td>{{ "%+.1f"|format(signal.accuracy_lift * 100) }} pts</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <details class="graph-fold-details">
+    <summary>Show accuracy for each fold</summary>
+    <div class="graph-table-wrap">
+      <table class="graph-table">
+        <thead><tr><th scope="col">Target</th><th scope="col">Fold</th><th scope="col">Test rows</th><th scope="col">Text model</th><th scope="col">Majority</th></tr></thead>
+        <tbody>
+          {% for target, signal in signals.items() %}
+            {% for fold in signal.fold_accuracy %}
+              <tr><th scope="row">{{ target }}</th><td>{{ fold.fold }}</td><td>{{ fold.test_rows }}</td><td>{{ "%.1f"|format(fold.tfidf_lr_accuracy * 100) }}%</td><td>{{ "%.1f"|format(fold.majority_accuracy * 100) }}%</td></tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  <p class="graph-method-note">Each fold fits a TF-IDF word-unigram logistic-regression model and its majority-class baseline on training rows only. Normalized exact-text groups stay within one fold. Near-duplicate but nonidentical text can still cross folds. Accuracy is descriptive and does not establish label quality or operational usefulness.</p>
+  {% else %}
+  <div class="notice-box">A grouped cross-validation comparison could not be calculated: {{ signals["Ticket Priority"].warning or signals["Ticket Status"].warning }}</div>
+  {% endif %}
+</section>
+
+<section class="graph-experiment-section" aria-labelledby="calibration-heading">
+  <div class="graph-section-heading">
+    <div>
+      <div class="eyebrow"><span class="eyebrow-line"></span> MODEL DIAGNOSTICS</div>
+      <h2 id="calibration-heading">Probability calibration</h2>
+      <p>Compare confidence with observed correctness on an untouched, text-grouped holdout.</p>
+    </div>
+    <form class="graph-target-picker" method="get" action="{{ url_for('graphs_page') }}">
+      <label for="graph-target">Evaluation target</label>
+      <select id="graph-target" name="target" onchange="this.form.submit()">
+        <option value="Ticket Priority" {% if evaluation_target == "Ticket Priority" %}selected{% endif %}>Ticket Priority</option>
+        <option value="Ticket Type" {% if evaluation_target == "Ticket Type" %}selected{% endif %}>Ticket Type</option>
+      </select>
+      <noscript><button class="button button-secondary" type="submit">Update graphs</button></noscript>
+    </form>
+  </div>
+  <div class="graph-experiment-grid">
+    <article class="panel graph-panel graph-diagnostic-panel" aria-labelledby="reliability-heading">
+      <div class="panel-heading">
+        <div>
+          <h3 id="reliability-heading">Reliability diagram</h3>
+          <p>{{ evaluation_target }} · {{ calibration.holdout_rows if calibration.status == "ok" else 0 }} held-out rows</p>
+        </div>
+        {% if calibration.status == "ok" %}
+        <div class="graph-panel-actions">
+          <button class="button button-secondary graph-download" type="button" data-chart-id="reliability-chart" data-filename="reliability-diagram" data-dpi="1200" data-width-inches="6">Download 1200-DPI PNG</button>
+          <span class="graph-download-status" role="status" aria-live="polite"></span>
+        </div>
+        {% endif %}
+      </div>
+      {% if calibration.status == "ok" %}
+      <div class="graph-legend graph-calibration-legend">
+        <span><i class="graph-key graph-key-uncalibrated"></i> Uncalibrated</span>
+        <span><i class="graph-key graph-key-sigmoid"></i> Sigmoid</span>
+        <span><i class="graph-key graph-key-isotonic"></i> Isotonic</span>
+        <span><i class="graph-key graph-key-perfect"></i> Perfect calibration</span>
+      </div>
+      <div class="accuracy-chart-wrap">
+        <svg id="reliability-chart" class="accuracy-chart reliability-chart" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="reliability-title reliability-description">
+          <title id="reliability-title">Reliability diagram for {{ evaluation_target }}</title>
+          <desc id="reliability-description">Predicted top-class confidence compared with empirical accuracy for uncalibrated, sigmoid-calibrated, and isotonic-calibrated probabilities. Points closer to the diagonal are better calibrated.</desc>
+          {% for tick in range(0, 6) %}
+            {% set value = tick / 5 %}
+            {% set x = 70 + value * 500 %}
+            {% set y = 285 - value * 250 %}
+            <line x1="{{ x }}" y1="35" x2="{{ x }}" y2="285" class="accuracy-gridline"></line>
+            <line x1="70" y1="{{ y }}" x2="570" y2="{{ y }}" class="accuracy-gridline"></line>
+            <text x="{{ x }}" y="310" class="accuracy-axis-label" text-anchor="middle">{{ "%.1f"|format(value) }}</text>
+            <text x="58" y="{{ y + 4 }}" class="accuracy-axis-label" text-anchor="end">{{ "%.1f"|format(value) }}</text>
+          {% endfor %}
+          <line x1="70" y1="285" x2="570" y2="35" class="reliability-perfect-line"></line>
+          <polyline class="reliability-series reliability-uncalibrated" points="{% for point in calibration.uncalibrated_reliability %}{{ 70 + point.mean_predicted * 500 }},{{ 285 - point.empirical * 250 }}{% if not loop.last %} {% endif %}{% endfor %}"></polyline>
+          <polyline class="reliability-series reliability-sigmoid" points="{% for point in calibration.methods.sigmoid.reliability_diagram %}{{ 70 + point.mean_predicted * 500 }},{{ 285 - point.empirical * 250 }}{% if not loop.last %} {% endif %}{% endfor %}"></polyline>
+          <polyline class="reliability-series reliability-isotonic" points="{% for point in calibration.methods.isotonic.reliability_diagram %}{{ 70 + point.mean_predicted * 500 }},{{ 285 - point.empirical * 250 }}{% if not loop.last %} {% endif %}{% endfor %}"></polyline>
+          {% for point in calibration.uncalibrated_reliability %}<circle cx="{{ 70 + point.mean_predicted * 500 }}" cy="{{ 285 - point.empirical * 250 }}" r="4" class="reliability-point reliability-uncalibrated"></circle>{% endfor %}
+          {% for point in calibration.methods.sigmoid.reliability_diagram %}<circle cx="{{ 70 + point.mean_predicted * 500 }}" cy="{{ 285 - point.empirical * 250 }}" r="4" class="reliability-point reliability-sigmoid"></circle>{% endfor %}
+          {% for point in calibration.methods.isotonic.reliability_diagram %}<circle cx="{{ 70 + point.mean_predicted * 500 }}" cy="{{ 285 - point.empirical * 250 }}" r="4" class="reliability-point reliability-isotonic"></circle>{% endfor %}
+          <text x="320" y="346" class="reliability-axis-title" text-anchor="middle">Mean predicted confidence</text>
+          <text x="16" y="160" class="reliability-axis-title" text-anchor="middle" transform="rotate(-90 16 160)">Observed accuracy</text>
+        </svg>
+      </div>
+      <div class="graph-ece-grid" aria-label="Expected calibration error by method; lower is better">
+        <div><span>Uncalibrated ECE</span><strong>{{ "%.3f"|format(calibration.uncalibrated_ece) }}</strong></div>
+        <div><span>Sigmoid ECE</span><strong>{{ "%.3f"|format(calibration.methods.sigmoid.ece) }}</strong></div>
+        <div><span>Isotonic ECE</span><strong>{{ "%.3f"|format(calibration.methods.isotonic.ece) }}</strong></div>
+      </div>
+      <p class="graph-method-note">Lower ECE is better. Calibration is fitted on a separate validation split and measured only on the untouched holdout. The plotted points use equal-width confidence bins; sparse bins can make the curve noisy.</p>
+      {% else %}
+      <div class="graph-empty-state"><strong>Calibration is unavailable for this target</strong><span>{{ calibration.warning }}</span></div>
+      {% endif %}
+    </article>
+
+  </div>
+</section>
+
+<section class="panel graph-panel" aria-labelledby="duplicates-heading">
+  <div class="panel-heading">
+    <div>
+      <h2 id="duplicates-heading">Exact and near-duplicate text audit</h2>
+      <p>Near-duplicate label disagreements are a warning that similar tickets may have inconsistent labels.</p>
+    </div>
+    <div class="graph-panel-actions">
+      <span class="panel-chip">TEXT ONLY</span>
+      <button class="button button-secondary graph-download" type="button" data-chart-id="duplicate-chart" data-filename="duplicate-label-conflicts" data-dpi="1200" data-width-inches="5.5">Download 1200-DPI PNG</button>
+      <span class="graph-download-status" role="status" aria-live="polite"></span>
+    </div>
+  </div>
+  <div class="graph-legend" aria-hidden="true">
+    <span><i class="graph-key graph-key-exact"></i> Exact-text groups</span>
+    <span><i class="graph-key graph-key-near"></i> Sampled near-duplicate pairs</span>
+  </div>
+  <div class="accuracy-chart-wrap">
+    <svg id="duplicate-chart" class="accuracy-chart" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 280" role="img" aria-labelledby="duplicate-chart-title duplicate-chart-description">
+      <title id="duplicate-chart-title">Exact-text and near-duplicate label conflicts</title>
+      <desc id="duplicate-chart-description">Counts of exact-text groups and sampled near-duplicate pairs with differing ticket type, priority, or status labels.</desc>
+      {% for tick in [0, 25, 50, 75, 100] %}
+        {% set x = 170 + tick * 4.4 %}
+        <line x1="{{ x }}" y1="43" x2="{{ x }}" y2="235" class="accuracy-gridline"></line>
+        <text x="{{ x }}" y="260" class="accuracy-axis-label" text-anchor="middle">{{ tick }}</text>
+      {% endfor %}
+      {% for target, exact_count in duplicates.conflicting_exact_text_groups_by_target.items() %}
+        {% set near_count = duplicates.near_duplicates.label_conflicts_by_target.get(target, 0) %}
+        {% set y = 62 + loop.index0 * 58 %}
+        <text x="12" y="{{ y + 13 }}" class="accuracy-target">{{ target }}</text>
+        <rect x="170" y="{{ y }}" width="{{ (exact_count * 4.4)|round(1) }}" height="16" rx="4" class="conflict-bar-exact"></rect>
+        <text x="{{ 178 + exact_count * 4.4 }}" y="{{ y + 12 }}" class="accuracy-value">{{ exact_count }}</text>
+        <rect x="170" y="{{ y + 21 }}" width="{{ (near_count * 4.4)|round(1) }}" height="16" rx="4" class="conflict-bar-near"></rect>
+        <text x="{{ 178 + near_count * 4.4 }}" y="{{ y + 33 }}" class="accuracy-value">{{ near_count }}</text>
+      {% endfor %}
+    </svg>
+  </div>
+  <div class="graph-stat-grid">
+    <div><span>Exact duplicate rows</span><strong>{{ duplicates.exact_duplicate_rows }}</strong></div>
+    <div><span>Distinct nonempty text groups</span><strong>{{ duplicates.distinct_nonempty_text_groups }}</strong></div>
+    <div><span>Exact groups with label conflicts</span><strong>{{ duplicates.conflicting_exact_text_groups }}</strong></div>
+    <div><span>Near-duplicate pairs found</span><strong>{{ duplicates.near_duplicates.pairs_above_threshold }}</strong></div>
+  </div>
+  <div class="graph-table-wrap">
+    <table class="graph-table">
+      <caption>Exact-text conflicts and sampled near-duplicate disagreements</caption>
+      <thead><tr><th scope="col">Target label</th><th scope="col">Conflicting exact-text groups</th><th scope="col">Near-duplicate pairs with disjoint labels</th></tr></thead>
+      <tbody>
+        {% for target, count in duplicates.conflicting_exact_text_groups_by_target.items() %}
+          <tr>
+            <th scope="row">{{ target }}</th>
+            <td>{{ count }}</td>
+            <td>{{ duplicates.near_duplicates.label_conflicts_by_target.get(target, 0) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="graph-method-note">{{ duplicates.near_duplicates.note }} The deterministic scan compared {{ duplicates.near_duplicates.sample_size }} distinct texts at cosine similarity ≥ {{ "%.2f"|format(duplicates.near_duplicates.similarity_threshold) }} ({{ duplicates.near_duplicates.available_distinct_texts }} available). It is a sample, not a census; no near-duplicate hits in this scan would not prove none exist.</p>
+</section>
+{% endblock %}
+{% block page_scripts %}<script src="{{ url_for('static', filename='graphs.js') }}" defer></script>{% endblock %}

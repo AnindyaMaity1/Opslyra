@@ -7,13 +7,21 @@ customer-support ticket data and helping IT support staff review,
 understand, and investigate ticket patterns. It combines a
 privacy-conscious ticket dashboard, classical NLP and machine-learning
 baselines, an Incident Lab with ten demonstrable workflows, adaptive AI
-workflow controls, and three research-oriented modules.
+workflow controls, a primary open-set experiment, and supporting
+research modules.
+
+> Dataset provenance: the project owner identifies
+> `customer_support_tickets.csv` as a Kaggle dataset. The exact Kaggle
+> listing URL/name, citation, license, retrieval date, and independent
+> label verification have not yet been recorded. The app labels it
+> **Kaggle Dataset** and does not claim that labels are verified
+> operational ground truth.
 
 The application reads a configured CSV file. Dashboard counts and
 data-quality indicators are calculated from the actual rows in that file
 rather than hardcoded demo values.
 
-> **Project status:** Research and demonstration prototype. It is not a
+> **Project status:** Research prototype. It is not a
 > production-ready, multi-user SaaS platform. See [Prototype Boundaries
 > and Limitations](#prototype-boundaries-and-limitations) before using
 > it with real customer data.
@@ -25,6 +33,7 @@ rather than hardcoded demo values.
 -   [Adaptive AI Mode](#adaptive-ai-mode)
 -   [Incident Lab: Ten Workflows](#incident-lab-ten-workflows)
 -   [Research Modules](#research-modules)
+-   [Research Protocol and Reproducibility](#research-protocol-and-reproducibility)
 -   [Technology Stack](#technology-stack)
 -   [Dataset and Data Handling](#dataset-and-data-handling)
 -   [NLP and Machine Learning](#nlp-and-machine-learning)
@@ -114,16 +123,14 @@ fields are excluded from predictive features.
 This is classical, lexical NLP. It is not a large language model and
 does not use pretrained semantic embeddings in the baseline classifier.
 
-### 5. Holdout Evaluation and Single-Ticket Prediction
+### 5. Cross-Validation and Single-Ticket Prediction
 
-The application provides a reproducible stratified random holdout report
-and a form for predicting the ticket type and priority of an individual
-ticket.
-
-The current evaluation split uses 75% of the labeled data for training
-and 25% for holdout evaluation, with random seed `42`. Reported metrics
-describe this particular split; they should not be interpreted as proof
-of production performance or future-time generalization.
+The application provides repeated stratified cross-validation, a
+separate final holdout where class support permits, and a form for
+predicting the ticket type and priority of an individual ticket. The
+final holdout is not used to select models. Reported intervals summarize
+seed/fold observations and are descriptive; they are not evidence of
+production performance or future-time generalization.
 
 ### 6. Privacy-Conscious Ticket Views
 
@@ -286,11 +293,27 @@ drift-monitoring or model-deployment service.
 
 ## Research Modules
 
-Open **Research Modules** at **`/research`** to explore three research
-candidates. These are implemented as experimental workflows; their
-effectiveness and novelty require separate validation.
+Open **Research Modules** at **`/research`** to run open-set detection
+and supporting research experiments. These are implemented as
+experimental workflows; their effectiveness and novelty require
+separate validation.
 
-### Module A --- Uncertainty-Gated Active Learning with Novelty-Aware Sampling
+### Primary Module --- Open-Set Ticket Detection
+
+The open-set experiment holds out one or more complete ticket classes
+from model training. For each seed, it trains on known classes, selects
+rejection thresholds using validation-only known examples, and reports
+unknown-detection ranking metrics, known-class classification reports,
+confusion matrices, and privacy-redacted error examples on the untouched
+test split. ROC and precision–recall curves are shown per seed.
+
+The held-out categories are only a proxy for unseen tickets. This
+experiment does not establish detection of new incidents in production,
+and its small number of classes or seeds may make estimates unstable.
+Threshold results are tied to the selected dataset, split, and score
+method.
+
+### Supporting Module A --- Uncertainty-Gated Active Learning with Novelty-Aware Sampling
 
 This module lets you adjust queue weights, inspect a ticket-review
 queue, and compare four review strategies:
@@ -314,7 +337,7 @@ Therefore, the benchmark does not establish real annotation savings or
 prove that active learning will improve results in a live support
 organization.
 
-### Module B --- Counterfactual Incident Routing with Operational Constraints
+### Supporting Module B --- Counterfactual Incident Routing with Operational Constraints
 
 This module compares ticket-text scenarios and examines:
 
@@ -332,7 +355,7 @@ parameters. Counterfactual phrasing stability is evaluated over three
 generated variants and is only a small diagnostic, not a human-validated
 explanation study.
 
-### Module C --- Temporal Incident Fingerprinting and Recurrence Forecasting
+### Supporting Module C --- Temporal Incident Fingerprinting and Recurrence Forecasting
 
 This module compares TF-IDF with a combined fingerprint using reduced
 text-latent features from TruncatedSVD, product/error-code indicators,
@@ -344,6 +367,39 @@ The current dataset contains only a few response-time dates. As a
 result, reliable recurrence forecasting is not supported by the
 available data. Event precision and recall are unavailable because the
 dataset does not contain incident labels.
+
+## Research Protocol and Reproducibility
+
+The `/research` form saves JSON records for completed audits, model
+evaluation, open-set experiments, calibration/ablation, and risk–coverage
+simulations under `instance/experiments/`. Each record includes its
+configuration, dataset fingerprint, software versions, and metrics.
+These reports are local generated data and are not committed.
+
+To run the bundled experiment suite from PowerShell:
+
+```powershell
+python experiments.py --output instance/experiments --seeds 0,1,2 reproduce
+```
+
+All shared options go before the subcommand. Individual commands include
+`audit`, `evaluate`, `ablation`, `openset`, and `risk-coverage`. For
+example, hold out a named ticket type:
+
+```powershell
+python experiments.py --output instance/experiments --seeds 0,1,2 --unknown "Refund request" openset
+```
+
+The runner does not fabricate a missing target, use the test split for
+threshold selection, or treat unverified timestamps as trustworthy.
+Actual output depends on the selected CSV, its provenance sidecar, and
+the installed software versions. Review each JSON report's warnings and
+limitations before interpreting a score.
+
+Independent label agreement is currently **not measured**. No
+independently verified operational labels are included. See the
+[annotation guide](docs/ANNOTATION_GUIDE.md) for a privacy-conscious,
+independent annotation and Cohen's kappa workflow.
 
 ## Technology Stack
 
@@ -406,7 +462,7 @@ The supplied dataset is expected to contain these 17 columns:
 16. `Time to Resolution`
 17. `Customer Satisfaction Rating`
 
-The current supplied CSV has **8,469 rows** and all 17 expected columns.
+The current Kaggle-sourced CSV has **8,469 rows** and all 17 expected columns.
 It contains five observed ticket types, four priorities, three statuses,
 and four channels. The application reports observed values rather than
 forcing the data into a narrower assumed taxonomy. Ticket IDs are unique
@@ -422,6 +478,22 @@ These counts describe the supplied dataset and should be rechecked if
 the CSV changes. The application calculates its dashboard values at
 runtime. Timestamp fields are checked for parseability; the prototype
 does not infer elapsed times or actual SLA outcomes from them.
+
+The current exact-text audit found 144 duplicate rows and 104 duplicated
+text groups with at least one conflicting ticket-type, priority, or
+status label. Re-run the audit when the data changes. Evaluation keeps
+normalized identical text within a single split; conflicting labels are
+still present in the source and remain a data-quality limitation.
+
+On the supplied CSV, 3-fold exact-text-grouped cross-validation gives
+priority accuracy of 24.1% versus a 25.9% fold-local majority baseline,
+and status accuracy of 33.9% versus 34.0%. The labels are nearly uniform
+in frequency, and this text model does not improve accuracy over the
+baseline. A deterministic sample of 400 distinct texts produced six
+near-duplicate pairs at cosine similarity 0.92 or higher; five had
+disjoint priority labels and two had disjoint status labels. This
+sampled scan is not a census, and these results do not prove the labels
+were generated randomly.
 
 The dataset uses `@example.com` email addresses as a dataset
 characteristic. The app does not render customer names or emails in
@@ -494,12 +566,23 @@ The prototype supports reproducible experiments, but results must be
 interpreted in context.
 
 -   **Classification:** the random holdout measures performance on one
-    stratified split.
+    final stratified split, when available; repeated cross-validation
+    provides additional seed/fold summaries.
+-   **Graphs:** `/graphs` compares full-dataset 3-fold grouped
+    cross-validated accuracy for priority and status against a
+    fold-local majority baseline. Exact normalized texts stay within one
+    fold. Its near-duplicate scan compares a deterministic sample of up
+    to 400 distinct texts at TF-IDF cosine similarity of 0.92 or higher;
+    it is not a census. Each graph can be downloaded as a PNG with
+    1200-DPI resolution metadata.
 -   **Calibration:** the reported calibration metrics describe the
     holdout and do not mean the model has been calibrated.
 -   **Novelty detection:** the threshold is estimated from within-corpus
     neighbors and is not independently validated against
     out-of-distribution examples.
+-   **Open-set detection:** thresholds are selected using validation-only
+    known-class examples; held-out categories are proxies for unseen
+    tickets, not operational incident ground truth.
 -   **Routing:** the dataset has no assigned-team ground truth, so real
     routing accuracy cannot be measured.
 -   **SLA risk:** no actual SLA targets or breach labels are supplied.
@@ -518,7 +601,9 @@ For a concise Windows quick start, see [howtorun.txt](howtorun.txt).
 
 ### Requirements
 
--   Python 3.10 or newer is recommended.
+-   Python 3.13.1 is the version used for the pinned test environment.
+-   Python 3.10 or newer may use the compatibility ranges in
+    `requirements.txt`; the exact lock is intended for Python 3.13.
 -   The project source files.
 -   The supplied CSV, unless you configure a different dataset path.
 
@@ -529,7 +614,7 @@ From the project directory, run:
 ``` powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-lock.txt
 $env:OPSLYRA_SECRET_KEY = "replace-this-with-a-long-random-value"
 python app.py
 ```
@@ -553,10 +638,37 @@ python app.py
 The CSV must contain all 17 expected columns listed in [Dataset and Data
 Handling](#dataset-and-data-handling).
 
+For a different CSV, place a JSON provenance file beside it using the
+name `<csv-filename>.provenance.json` (for example,
+`tickets.csv.provenance.json`). Record the source, citation, license,
+retrieval date, and label/timestamp verification status. The application
+defaults unrecognized CSVs to an unverified external dataset; malformed
+sidecars are reported as data errors rather than silently ignored.
+
+```json
+{
+  "source_kind": "external",
+  "source": "Dataset source name",
+  "label": "External dataset",
+  "citation": "Publication or source URL",
+  "license": "License identifier or pending review",
+  "retrieval_date": "YYYY-MM-DD",
+  "labels_verified": false,
+  "timestamps_trustworthy": false
+}
+```
+
+Only set `labels_verified` or `timestamps_trustworthy` to `true` when the
+relevant evidence has been independently checked and documented. The
+repository's supplied demo CSV has no verified source/license decision;
+do not infer reuse rights from its presence here.
+
 ### Other Operating Systems
 
 Create and activate a virtual environment using your operating system's
-Python commands, install dependencies from `requirements.txt`, set the
+Python commands. For the tested Python 3.13 environment, install from
+`requirements-lock.txt`; for other supported versions, install from
+`requirements.txt`. Set the
 environment variables described below, and run `python app.py`.
 
 ## Configuration
@@ -592,9 +704,11 @@ configured Flask secret does not add authentication or tenant isolation.
     ticket-level modes, inspect recommendations, approve or reject
     Copilot suggestions, and try manual takeover.
 6.  **Open Research Modules** at `/research` to compare the
-    active-learning, constrained-routing, and temporal-fingerprinting
-    experiments.
-7.  **Review generated local state** under `instance/` to inspect local
+    primary open-set experiment and its supporting studies.
+7.  **Open Graphs** at `/graphs` to compare priority and status
+    cross-validated accuracy against a majority baseline and inspect
+    exact/near-duplicate label conflicts.
+8.  **Review generated local state** under `instance/` to inspect local
     model artifacts and workflow-related data created by the prototype.
 
 Correction examples are linked to their source ticket IDs. Model
@@ -609,6 +723,9 @@ From the project directory, run:
 python -m pytest -q
 ```
 
+For the pinned test environment, install `requirements-lock.txt` first.
+GitHub Actions runs this suite on Python 3.10 using compatibility ranges
+and on Python 3.13.1 using the exact lock.
 Review the test output and resolve failures before presenting the
 project as verified. Test results depend on the code and environment in
 which the command is run.

@@ -18,6 +18,7 @@
       <div class="workspace-label">WORKSPACE</div>
       <nav class="nav-list" aria-label="Main navigation">
         <a class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span class="nav-icon">⌂</span> Overview</a>
+        <a class="nav-item {% if request.endpoint == 'graphs_page' %}active{% endif %}" href="{{ url_for('graphs_page') }}"><span class="nav-icon">▥</span> Graphs</a>
         <a class="nav-item {% if request.endpoint in ['tickets', 'ticket_detail'] %}active{% endif %}" href="{{ url_for('tickets') }}"><span class="nav-icon">▤</span> Tickets <span class="nav-count">{{ profile.row_count if profile is defined else '' }}</span></a>
         <a class="nav-item {% if request.endpoint == 'predict' %}active{% endif %}" href="{{ url_for('predict') }}"><span class="nav-icon">✳</span> AI prediction</a>
         <a class="nav-item {% if request.endpoint == 'models_page' %}active{% endif %}" href="{{ url_for('models_page') }}"><span class="nav-icon">⌁</span> Model evaluation</a>
@@ -43,7 +44,7 @@
       <header class="topbar">
         <div class="breadcrumbs"><span>Workspace</span><span class="crumb-divider">/</span><strong>{% block breadcrumb %}Overview{% endblock %}</strong></div>
         <div class="topbar-actions">
-          <span class="dataset-indicator"><span class="status-dot"></span> Dataset connected</span>
+          <span class="dataset-indicator"><span class="status-dot"></span> {{ dataset_label or 'Configured dataset' }} · local prototype</span>
           <span class="topbar-divider"></span>
           <label class="workspace-mode-control">Workspace mode
             <select id="workspace-ai-mode" aria-label="Workspace AI mode">
@@ -71,5 +72,6 @@
     </main>
   </div>
   <script src="{{ url_for('static', filename='adaptive.js') }}" defer></script>
+  {% block page_scripts %}{% endblock %}
 </body>
 </html>

@@ -11,7 +11,7 @@
 <section class="lab-grid">
   <article class="panel lab-card" id="human-loop">
     <div class="lab-title"><span class="feature-number">01</span><div><h2>Human-in-the-loop learning</h2><p>Save a correction, prioritize informative examples, then create a version.</p></div></div>
-    <form class="lab-form" method="post" action="{{ url_for('intelligence_page') }}">
+    <form class="lab-form" method="post" action="{{ url_for('intelligence_page') }}"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
       <input type="hidden" name="action" value="correction">
       <label>Ticket ID<input name="ticket_id" required placeholder="e.g. 42" list="ticket-ids"></label>
       <label>Correct this field<select name="target"><option>Ticket Type</option><option>Ticket Priority</option><option>Team</option></select></label>
@@ -27,12 +27,12 @@
       {% endfor %}
     </div>
     {% else %}<p class="empty-inline">No corrections submitted in this local workspace yet.</p>{% endif %}
-    <form method="post" action="{{ url_for('intelligence_page') }}" class="inline-action"><input type="hidden" name="action" value="train"><button class="button button-secondary" type="submit">Train new model version</button><span>Uses available corrections as reviewed training examples.</span></form>
+    <form method="post" action="{{ url_for('intelligence_page') }}" class="inline-action"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><input type="hidden" name="action" value="train"><button class="button button-secondary" type="submit">Train new model version</button><span>Uses available corrections as reviewed training examples.</span></form>
   </article>
 
   <article class="panel lab-card" id="open-set">
     <div class="lab-title"><span class="feature-number">02</span><div><h2>Open-set incident discovery</h2><p>Compare new text with the observed ticket corpus.</p></div></div>
-    <form class="lab-form lab-form-stack" method="post">
+    <form class="lab-form lab-form-stack" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
       <input type="hidden" name="action" value="novelty">
       <label>Subject<input name="subject" maxlength="500" placeholder="Describe an unfamiliar issue"></label>
       <label>Description<textarea name="description" rows="3" maxlength="10000" placeholder="Add symptoms, affected services, or error code"></textarea></label>
@@ -52,7 +52,7 @@
 
   <article class="panel lab-card" id="counterfactual">
     <div class="lab-title"><span class="feature-number">03</span><div><h2>Counterfactual text explorer</h2><p>See how added context changes model outputs.</p></div></div>
-    <form class="lab-form lab-form-stack" method="post">
+    <form class="lab-form lab-form-stack" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
       <input type="hidden" name="action" value="counterfactual">
       <label>Subject<input name="subject" maxlength="500" placeholder="e.g. Login outage"></label>
       <label>Description<textarea name="description" rows="3" maxlength="10000" placeholder="Describe the current issue"></textarea></label>
@@ -85,7 +85,7 @@
 
   <article class="panel lab-card" id="sla-sandbox">
     <div class="lab-title"><span class="feature-number">05</span><div><h2>SLA risk sandbox</h2><p>Adjust assumptions and see the transparent risk index update.</p></div></div>
-    <form class="lab-form sla-form" method="post">
+    <form class="lab-form sla-form" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
       <input type="hidden" name="action" value="sla">
       <label>Priority<select name="priority">{% for item in ["Low", "Medium", "High", "Critical"] %}<option>{{ item }}</option>{% endfor %}</select></label>
       <label>Elapsed hours<input name="elapsed_hours" type="number" min="0" step="0.5" value="{{ request.form.get('elapsed_hours', 2) }}"></label>
@@ -101,7 +101,7 @@
 
   <article class="panel lab-card" id="routing">
     <div class="lab-title"><span class="feature-number">06</span><div><h2>Adaptive routing simulator</h2><p>Compare skill matching with round-robin allocation.</p></div></div>
-    <form class="inline-form" method="post">
+    <form class="inline-form" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
       <input type="hidden" name="action" value="routing">
       <label>Capacity scale<input name="capacity_factor" type="number" min="0.5" max="2" step="0.1" value="{{ request.form.get('capacity_factor', 1) }}"></label>
       <button class="button button-secondary" type="submit">Run simulation</button>
@@ -129,7 +129,7 @@
 
   <article class="panel lab-card" id="privacy">
     <div class="lab-title"><span class="feature-number">08</span><div><h2>Privacy-aware text handling</h2><p>Redaction scan and local count-only audit trail.</p></div></div>
-    <form class="lab-form lab-form-stack" method="post">
+    <form class="lab-form lab-form-stack" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
       <input type="hidden" name="action" value="privacy_scan">
       <label>Try a redaction scan<textarea name="privacy_text" rows="3" placeholder="Paste sample text with email, @username, IP, token, or phone"></textarea></label>
       <button class="button button-secondary" type="submit">Redact before inference</button>
@@ -143,7 +143,7 @@
 
   <article class="panel lab-card" id="resolution-memory">
     <div class="lab-title"><span class="feature-number">09</span><div><h2>Evidence-grounded resolution memory</h2><p>Find similar historical tickets with recorded resolutions.</p></div></div>
-    <form class="lab-form lab-form-stack" method="post">
+    <form class="lab-form lab-form-stack" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">>
       <input type="hidden" name="action" value="memory">
       <label>Subject<input name="subject" maxlength="500" placeholder="Describe the issue to search"></label>
       <label>Description<textarea name="description" rows="3" maxlength="10000" placeholder="Add details to improve matching"></textarea></label>
@@ -168,7 +168,7 @@
     <div class="version-list">
       {% for version in versions[:5] %}
       <div><strong>v{{ version.version }} {% if version.active %}<em>ACTIVE</em>{% endif %}</strong><span>{{ version.created_at }}</span><small>{{ version.training_examples }} training examples · {{ version.metrics|length }} target report(s){% for target, metrics in version.metrics.items() if metrics.accuracy is not none %} · {{ target }} accuracy {{ "%.2f"|format(metrics.accuracy) }}{% endfor %}</small>
-        {% if not version.active %}<form method="post"><input type="hidden" name="action" value="rollback"><input type="hidden" name="version" value="{{ version.version }}"><button class="text-button" type="submit">Rollback</button></form>{% endif %}
+        {% if not version.active %}<form method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><input type="hidden" name="action" value="rollback"><input type="hidden" name="version" value="{{ version.version }}"><button class="text-button" type="submit">Rollback</button></form>{% endif %}
       </div>
       {% else %}<p class="empty-inline">No model versions stored yet.</p>{% endfor %}
     </div>

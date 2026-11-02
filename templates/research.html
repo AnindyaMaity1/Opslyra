@@ -3,17 +3,126 @@
 {% block breadcrumb %}Research modules{% endblock %}
 {% block content %}
 <section class="page-heading compact-heading">
-  <div><div class="eyebrow"><span class="eyebrow-line"></span> PROJECT DIFFERENTIATORS</div><h1>Research modules</h1><p class="subtitle">Three reproducible research candidates with interactive samplers, constrained simulations, and temporal comparisons.</p></div>
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> OPEN-SET TICKET RESEARCH</div><h1>Research modules</h1><p class="subtitle">Reproducible open-set detection is the primary experiment; active learning and incident analyses are supporting explorations.</p></div>
   <span class="prototype-tag"><span class="status-dot"></span> Research prototype · methods are not novelty claims</span>
 </section>
 <div class="notice-box research-boundary"><strong>Dataset fit:</strong> {{ "{:,}".format(profile.row_count) }} tickets, {{ temporal.days_observed }} observed ticket-response dates. Available labels support a ticket-type active-learning simulation, but there are no assigned-team labels or incident/event ground truth. Temporal scores and routing outcomes are therefore limited or explicitly unavailable.</div>
+
+<article class="panel research-panel openset-primary" id="open-set-evaluation">
+  <div class="research-title"><span class="feature-number">01</span><div><div class="eyebrow">PRIMARY RESEARCH MODULE · OPEN-SET DETECTION</div><h2>Known-class classification and unseen-class rejection</h2><p>Hold out complete ticket classes from training, keep normalized duplicate text together, select rejection thresholds on validation data, and report on untouched known/unknown test examples.</p></div></div>
+  <div class="notice-box"><strong>Interpretation:</strong> the supplied CSV is identified as a Kaggle dataset; its exact listing, license, and independent label verification are not recorded here. Held-out dataset categories are a proxy for unseen tickets, not evidence that the system can detect every novel incident.</div>
+  <form class="research-form openset-form" method="post" action="{{ url_for('research_page') }}">
+    <input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
+    <input type="hidden" name="action" value="openset">
+    <label>Target
+      <select name="target"><option>Ticket Type</option><option>Ticket Priority</option></select>
+    </label>
+    <label>Unknown class labels <span class="optional-label">comma-separated; blank selects a rare class</span>
+      <input name="unknown_classes" maxlength="300" placeholder="e.g. Refund request">
+    </label>
+    <label>Random seeds <input name="seeds" value="0,1,2,3,4,5,6,7,8,9" required aria-describedby="open-set-seed-help"></label>
+    <small id="open-set-seed-help">1–20 unique seeds. Ten are requested by default; seeds that cannot form valid stratified splits are reported as skipped.</small>
+    <button class="button button-primary" type="submit">Run open-set experiment</button>
+  </form>
+  {% if openset_result %}
+    {% if openset_result.status == "ok" %}
+    <div class="result-banner result-positive"><strong>Open-set experiment complete · {{ openset_result.seeds|length }} valid seeds</strong><span>Known classes: {{ openset_result.known_classes|join(", ") }} · held out: {{ openset_result.held_out_classes|join(", ") }}</span><small>Threshold source: {{ openset_result.threshold_source }} · target known false-positive rate: {{ "%.0f"|format(openset_result.target_known_fpr_for_threshold * 100) }}%</small></div>
+    <div class="research-table-wrap">
+      <table class="research-table">
+        <caption>Unknown-detection metrics across seeds; mean, standard deviation, and descriptive 95% interval</caption>
+        <thead><tr><th>Scoring method</th><th>AUROC · mean (SD)</th><th>AUROC · 95% interval</th><th>AUPR · mean (SD)</th><th>AUPR · 95% interval</th><th>Unknown recall</th><th>Known rejection</th></tr></thead>
+        <tbody>
+        {% for method, metrics in openset_result.summary.items() %}
+          <tr>
+            <th scope="row">{{ method|replace("_", " ")|title }}</th>
+            <td>{% if metrics.auroc.mean is not none %}{{ "%.3f"|format(metrics.auroc.mean) }} ({{ "%.3f"|format(metrics.auroc.std) }}){% else %}N/A{% endif %}</td>
+            <td>{% if metrics.auroc.ci95_low is not none %}[{{ "%.3f"|format(metrics.auroc.ci95_low) }}, {{ "%.3f"|format(metrics.auroc.ci95_high) }}]{% else %}N/A{% endif %}</td>
+            <td>{% if metrics.aupr.mean is not none %}{{ "%.3f"|format(metrics.aupr.mean) }} ({{ "%.3f"|format(metrics.aupr.std) }}){% else %}N/A{% endif %}</td>
+            <td>{% if metrics.aupr.ci95_low is not none %}[{{ "%.3f"|format(metrics.aupr.ci95_low) }}, {{ "%.3f"|format(metrics.aupr.ci95_high) }}]{% else %}N/A{% endif %}</td>
+            <td>{{ "%.3f"|format(metrics.unknown_recall.mean) if metrics.unknown_recall.mean is not none else "N/A" }}</td>
+            <td>{{ "%.3f"|format(metrics.known_rejection_rate.mean) if metrics.known_rejection_rate.mean is not none else "N/A" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if openset_result.per_seed %}
+    <div class="openset-curves">
+      <section><h3>ROC curves · first valid seed</h3>
+        <svg viewBox="0 0 100 100" role="img" aria-label="ROC curves for open-set detection methods">
+          <line x1="0" y1="100" x2="100" y2="0" class="chart-baseline"></line>
+          {% for method, metrics in openset_result.per_seed[0].methods.items() %}
+            {% if metrics.roc %}<polyline class="openset-curve curve-{{ loop.index }}" points="{% for x in metrics.roc.fpr %}{{ (x * 100)|round(1) }},{{ (100 - metrics.roc.tpr[loop.index0] * 100)|round(1) }} {% endfor %}"></polyline>{% endif %}
+          {% endfor %}
+        </svg>
+        <p>False-positive rate → · true-positive rate ↑. Curves are per seed; aggregate uncertainty is shown above.</p>
+        <div class="openset-legend">{% for method in openset_result.summary.keys() %}<span class="legend-{{ loop.index }}">{{ method|replace("_", " ")|title }}</span>{% endfor %}</div>
+      </section>
+      <section><h3>Precision–recall curves · first valid seed</h3>
+        <svg viewBox="0 0 100 100" role="img" aria-label="Precision-recall curves for open-set detection methods">
+          {% for method, metrics in openset_result.per_seed[0].methods.items() %}
+            {% if metrics.pr %}<polyline class="openset-curve curve-{{ loop.index }}" points="{% for x in metrics.pr.recall %}{{ (x * 100)|round(1) }},{{ (100 - metrics.pr.precision[loop.index0] * 100)|round(1) }} {% endfor %}"></polyline>{% endif %}
+          {% endfor %}
+        </svg>
+        <p>Recall → · precision ↑. Curves are shown per seed, not pooled across test folds.</p>
+      </section>
+    </div>
+    <details class="openset-seed-details"><summary>Per-seed thresholds, known-class metrics, and confusion matrices</summary>
+      {% for seed in openset_result.per_seed %}
+      <h3>Seed {{ seed.seed }}</h3>
+      <div class="research-table-wrap"><table class="research-table"><thead><tr><th>Method</th><th>AUROC</th><th>AUPR</th><th>Threshold</th><th>Unknown recall</th><th>Known rejection</th><th>Known accuracy</th></tr></thead><tbody>
+        {% for method, metrics in seed.methods.items() %}
+        <tr><th scope="row">{{ method|replace("_", " ")|title }}</th><td>{{ "%.3f"|format(metrics.auroc) if metrics.auroc is not none else "N/A" }}</td><td>{{ "%.3f"|format(metrics.aupr) if metrics.aupr is not none else "N/A" }}</td><td>{{ "%.4f"|format(metrics.threshold) }}</td><td>{{ "%.3f"|format(metrics.unknown_recall) if metrics.unknown_recall is not none else "N/A" }}</td><td>{{ "%.3f"|format(metrics.known_rejection_rate) if metrics.known_rejection_rate is not none else "N/A" }}</td><td>{{ "%.3f"|format(metrics.known_class_accuracy) if metrics.known_class_accuracy is not none else "N/A" }}</td></tr>
+        <tr><td colspan="7"><details><summary>{{ method|replace("_", " ")|title }} known-class report and confusion matrix</summary>
+          <div class="research-table-wrap"><table class="research-table"><caption>Known-class classification report for seed {{ seed.seed }}</caption><thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1</th><th>Support</th></tr></thead><tbody>
+            {% for label, scores in metrics.known_classification.per_class.items() %}<tr><th scope="row">{{ label }}</th><td>{{ "%.3f"|format(scores.precision) }}</td><td>{{ "%.3f"|format(scores.recall) }}</td><td>{{ "%.3f"|format(scores["f1-score"]) }}</td><td>{{ scores.support|int }}</td></tr>{% endfor %}
+          </tbody></table></div>
+          <div class="research-table-wrap"><table class="research-table"><caption>Rows are true labels; columns are predicted labels</caption><thead><tr><th scope="col">True / predicted</th>{% for label in metrics.known_classification.labels %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead><tbody>
+            {% for row_label in metrics.known_classification.labels %}{% set row_index = loop.index0 %}<tr><th scope="row">{{ row_label }}</th>{% for count in metrics.known_classification.confusion_matrix[row_index] %}<td>{{ count }}</td>{% endfor %}</tr>{% endfor %}
+          </tbody></table></div>
+        </details></td></tr>
+        {% endfor %}
+      </tbody></table></div>
+      {% endfor %}
+    </details>
+    {% endif %}
+    {% if openset_result.error_examples %}<details><summary>Privacy-redacted false-unknown and missed-unknown examples</summary>{% for item in openset_result.error_examples %}<p><strong>{{ item.kind|replace("_", " ")|title }} · {{ item.true_label }}</strong><br>{{ item.text }}</p>{% endfor %}</details>{% endif %}
+    <p class="method-note">The intervals summarize seed-level test metrics and are descriptive rather than proof of independent statistical significance. Unknown thresholds are selected on validation-only examples.</p>
+    {% else %}
+    <div class="result-banner result-warning"><strong>Experiment not run</strong><span>{{ openset_result.message or "The available class support could not form reliable known/unknown splits." }}</span></div>
+    {% endif %}
+  {% endif %}
+</article>
+
+<article class="panel research-panel supporting-experiments">
+  <div class="research-title"><span class="feature-number">02</span><div><div class="eyebrow">SUPPORTING EXPERIMENTS</div><h2>Dataset audit, baselines, calibration, ablation, and risk–coverage</h2><p>Each run records its split strategy and limitations. Results are exploratory until independently validated.</p></div></div>
+  <div class="research-columns">
+    <section><h3>Dataset and label-signal audit</h3><form class="inline-form" method="post" action="{{ url_for('research_page') }}"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><input type="hidden" name="action" value="audit"><button class="button button-secondary" type="submit">Run dataset audit</button></form>
+      {% if audit_result %}<p>{{ audit_result.row_count }} rows · {{ audit_result.dataset_label }} · {{ audit_result.source_kind }}</p>{% for target, suitability in audit_result.target_suitability.items() %}<div class="quality-field"><strong>{{ target }}</strong><span>{{ suitability.reason }}</span></div>{% endfor %}<p class="method-note">Open <a href="{{ url_for('graphs_page') }}">Graphs</a> for full-dataset cross-validated priority/status accuracy and the exact/near-duplicate summary. Detailed audit metrics and leakage exclusions are also saved in the generated JSON report.</p>{% endif %}
+    </section>
+    <section><h3>Baseline comparison</h3><form class="research-form" method="post" action="{{ url_for('research_page') }}"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><input type="hidden" name="action" value="evaluate"><label>Target<select name="target"><option>Ticket Type</option><option>Ticket Priority</option></select></label><label>Seeds<input name="seeds" value="0,1,2"></label><button class="button button-secondary" type="submit">Compare models</button></form>
+      {% if evaluation_result and evaluation_result.status == "ok" %}
+      <div class="research-table-wrap"><table class="research-table"><thead><tr><th>Model</th><th>Macro-F1 mean (SD)</th><th>Descriptive 95% interval</th><th>Accuracy mean</th><th>Balanced accuracy</th><th>Train / inference seconds</th></tr></thead><tbody>
+        {% for name, result in evaluation_result.cross_validation.items() %}{% if result.status != "not_run" %}<tr><th scope="row">{{ name|replace("_", " ")|title }}</th><td>{{ "%.3f"|format(result.macro_f1.mean) }} ({{ "%.3f"|format(result.macro_f1.std) }})</td><td>[{{ "%.3f"|format(result.macro_f1.ci95_low) }}, {{ "%.3f"|format(result.macro_f1.ci95_high) }}]</td><td>{{ "%.3f"|format(result.accuracy.mean) }}</td><td>{{ "%.3f"|format(result.balanced_accuracy.mean) }}</td><td>{{ "%.3f"|format(result.mean_train_seconds) }} / {{ "%.4f"|format(result.mean_infer_seconds) }}</td></tr>{% endif %}{% endfor %}
+      </tbody></table></div>
+      <details><summary>Final holdout, class reports, confusion matrices, and chronological results</summary><pre>{{ evaluation_result.final_holdout|tojson(indent=2) }}</pre><pre>{{ evaluation_result.chronological|tojson(indent=2) }}</pre></details>
+      {% elif evaluation_result %}<p class="method-note">{{ evaluation_result.warnings|join(" ") if evaluation_result.warnings else "Insufficient label support." }}</p>{% endif %}
+    </section>
+    <section><h3>Calibration and ablation</h3><form class="inline-form" method="post" action="{{ url_for('research_page') }}"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><input type="hidden" name="action" value="ablation"><button class="button button-secondary" type="submit">Run calibration and ablation</button></form>
+      {% if ablation_result %}<pre>{{ ablation_result|tojson(indent=2) }}</pre>{% endif %}
+    </section>
+    <section><h3>Risk–coverage simulation</h3><form class="research-form" method="post" action="{{ url_for('research_page') }}"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><input type="hidden" name="action" value="risk-coverage"><label>Selection policy<select name="selection_mode"><option value="target_coverage">Target coverage</option><option value="target_risk">Target selective risk</option></select></label><label>Coverage<input name="coverage" type="number" min="0.1" max="1" step="0.05" value="0.6"></label><label>Target risk<input name="target_risk" type="number" min="0" max="1" step="0.05" value="0.1"></label><button class="button button-secondary" type="submit">Run risk–coverage simulation</button></form>
+      {% if risk_result %}<pre>{{ risk_result|tojson(indent=2) }}</pre>{% endif %}
+    </section>
+  </div>
+</article>
 
 <article class="panel research-panel" id="differentiator-a">
   <div class="research-title"><span class="feature-number">A</span><div><div class="eyebrow">UNCERTAINTY-GATED ACTIVE LEARNING</div><h2>Novelty-aware annotation queue</h2><p>Rank tickets using predictive uncertainty, novelty, text-based impact, diversity, and estimated annotation effort.</p></div></div>
   <div class="research-columns">
     <section>
       <h3>Live review queue</h3>
-      <form class="research-form" method="post">
+      <form class="research-form" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
         <input type="hidden" name="action" value="queue">
         <label>Uncertainty <input type="number" name="uncertainty" min="0" max="1" step="0.05" value="{{ "%.2f"|format(queue_weights.uncertainty) }}"></label>
         <label>Novelty <input type="number" name="novelty" min="0" max="1" step="0.05" value="{{ "%.2f"|format(queue_weights.novelty) }}"></label>
@@ -36,7 +145,7 @@
     <section>
       <h3>Equal-budget research test</h3>
       <p class="research-description">Run an offline oracle simulation on labeled ticket types using one fixed stratified test set and identical acquisition budgets.</p>
-      <form class="inline-form" method="post">
+      <form class="inline-form" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
         <input type="hidden" name="action" value="benchmark">
         <label>Additional labels per policy<input type="number" name="budget" min="4" max="120" value="40"></label>
         <button class="button button-secondary" type="submit">Compare 4 policies</button>
@@ -62,7 +171,7 @@
 
 <article class="panel research-panel" id="differentiator-b">
   <div class="research-title"><span class="feature-number">B</span><div><div class="eyebrow">COUNTERFACTUAL INCIDENT ROUTING</div><h2>Operational-constraint simulator</h2><p>Separate text-model recommendations from configured team policy, workload, capacity, and simulated SLA feasibility.</p></div></div>
-  <form class="routing-study-form" method="post">
+  <form class="routing-study-form" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
     <input type="hidden" name="action" value="routing-study">
     <div class="routing-text">
       <label>Ticket subject<input name="subject" maxlength="500" required placeholder="e.g. Production checkout outage"></label>

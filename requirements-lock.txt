@@ -1,0 +1,26 @@
+# Exact dependency set used by the Python 3.13.1 test environment.
+Flask==3.1.3
+Jinja2==3.1.6
+MarkupSafe==3.0.2
+narwhals==2.24.0
+Werkzeug==3.1.9
+blinker==1.9.0
+click==8.5.0
+cloudpickle==3.1.2
+colorama==0.4.6
+iniconfig==2.3.0
+itsdangerous==2.2.0
+joblib==1.6.0
+numpy==2.3.0
+packaging==25.0
+pandas==2.3.0
+pluggy==1.6.0
+Pygments==2.19.1
+pytest==8.3.4
+python-dateutil==2.9.0.post0
+pytz==2025.2
+scikit-learn==1.9.1
+scipy==1.18.0
+six==1.17.0
+threadpoolctl==3.7.0
+tzdata==2025.2

@@ -15,6 +15,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import normalize
 from sklearn.linear_model import LogisticRegression
 from sklearn.decomposition import TruncatedSVD
+from reproducibility import exact_text_group_ids, stratified_group_holdout_indices
 
 from data import redact_sensitive_text, ticket_text
 
@@ -183,13 +184,19 @@ def active_learning_benchmark(
     if len(np.unique(labels)) < 2 or min(pd.Series(labels).value_counts()) < 4:
         raise ValueError("Active-learning comparison needs at least four examples per class.")
 
-    all_indexes = np.arange(len(working))
-    pool_indexes, test_indexes = train_test_split(
-        all_indexes,
-        test_size=0.25,
-        random_state=seed,
-        stratify=labels,
+    texts = texts.loc[working.index].reset_index(drop=True)
+    split = stratified_group_holdout_indices(
+        labels,
+        exact_text_group_ids(texts),
+        0.25,
+        seed,
     )
+    if split is None:
+        raise ValueError(
+            "Active-learning comparison needs a class-complete test split with "
+            "identical text grouped together."
+        )
+    pool_indexes, test_indexes = split
     local_pool_indexes = np.arange(len(pool_indexes))
     initial_indexes, unlabeled_indexes = train_test_split(
         local_pool_indexes,
@@ -208,7 +215,6 @@ def active_learning_benchmark(
             )
         )
     )
-    texts = texts.loc[working.index].reset_index(drop=True)
     vectorizer, _ = _text_model()
     pool_texts = texts.iloc[pool_indexes]
     matrix = vectorizer.fit_transform(pool_texts)
@@ -287,6 +293,7 @@ def active_learning_benchmark(
         "test_rows": len(test_indexes),
         "initial_labels": len(initial_indexes),
         "requested_budget": maximum_budget,
+        "split_grouping": "normalized identical text stays within a single fixed test split",
         "rare_class": rare_label,
         "policies": {
             "random": "Random sampling",
@@ -296,7 +303,7 @@ def active_learning_benchmark(
         },
         "curves": curves,
         "metric_warning": (
-            "Offline oracle simulation on existing labels; identical fixed holdout, "
+            "Offline oracle simulation on existing labels; identical exact-text-grouped fixed holdout, "
             "seed, and annotation counts. It does not measure actual reviewer quality."
         ),
     }

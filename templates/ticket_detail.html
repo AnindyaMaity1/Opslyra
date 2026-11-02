@@ -39,7 +39,9 @@
         </select>
       </label>
       {% if ai_mode != "takeover" %}
-      <button class="button button-primary adaptive-run-ticket" type="button">Run permitted AI workflow</button>
+      <button class="button button-secondary adaptive-preview-ticket" type="button">Preview workflow (dry-run)</button>
+      <button class="button button-primary adaptive-run-ticket" type="button" disabled>Proceed with previewed workflow</button>
+      <section class="adaptive-dry-run-preview notice-box" hidden aria-live="polite"></section>
       {% else %}
       <div class="adaptive-takeover-banner">Human takeover active · AI processing is paused.</div>
       {% endif %}

@@ -3,9 +3,14 @@
 {% block breadcrumb %}Data quality{% endblock %}
 {% block content %}
 <section class="page-heading compact-heading">
-  <div><div class="eyebrow"><span class="eyebrow-line"></span> DATASET INSPECTION</div><h1>Data quality</h1><p class="subtitle">A schema and completeness report computed from the configured CSV.</p></div>
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> DATASET INSPECTION</div><h1>Data quality</h1><p class="subtitle">{{ profile.dataset_label }} · schema and completeness checks computed without changing source values.</p></div>
   <a class="button button-secondary" href="{{ url_for('tickets') }}">Browse tickets</a>
 </section>
+{% if profile.validation_issues %}
+<div class="notice-box result-warning" role="status"><strong>Validation findings</strong><ul>{% for issue in profile.validation_issues %}<li>{{ issue }}</li>{% endfor %}</ul></div>
+{% else %}
+<div class="notice-box"><strong>Validation:</strong> no schema or parseability issues were detected. Missing values remain missing in the raw representation; model preparation does not mutate this page's dataset.</div>
+{% endif %}
 <section class="metric-grid quality-metrics">
   <article class="metric-card"><div class="metric-top"><span class="metric-label">Rows inspected</span><span class="metric-icon icon-blue">▤</span></div><div class="metric-value">{{ "{:,}".format(profile.row_count) }}</div><div class="metric-foot"><span class="metric-note">{{ profile.column_count }} required columns present</span></div></article>
   <article class="metric-card"><div class="metric-top"><span class="metric-label">Blank cells</span><span class="metric-icon icon-amber">◫</span></div><div class="metric-value">{{ "{:,}".format(profile.missing_total) }}</div><div class="metric-foot"><span class="metric-note">Across the required schema</span></div></article>
