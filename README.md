@@ -1,6 +1,7 @@
 # Opslyra
 
 This project is built under the guidance of **Prof. Dr. Govind Pandey**.
+Department of CSE (AI & ML), Dayananda Sagar University, Bengaluru, Karnataka 562112, India.
 
 LinkedIn Profile - [Link](https://www.linkedin.com/in/dr-govind-pandey-145a43131/)
 
