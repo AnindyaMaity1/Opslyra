@@ -1,6 +1,6 @@
 # Opslyra
 
-This project is built under the guidance of **Prof. Dr. Govind Pandey. ** 
+This project is built under the guidance of **Prof. Dr. Govind Pandey.** 
 
 LinkedIn Profile -  [Link](https://www.linkedin.com/in/dr-govind-pandey-145a43131/). 
 
