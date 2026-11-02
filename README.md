@@ -2,648 +2,200 @@
 
 **From Every Ticket to Intelligent Action.**
 
-Opslyra is a local Flask research prototype for exploring
-customer-support ticket data and helping IT support staff review,
-understand, and investigate ticket patterns. It combines a
-privacy-conscious ticket dashboard, classical NLP and machine-learning
-baselines, an Incident Lab with ten demonstrable workflows, adaptive AI
-workflow controls, a primary open-set experiment, and supporting
-research modules.
-
-> Dataset provenance: the project owner identifies
-> `customer_support_tickets.csv` as a Kaggle dataset. The exact Kaggle
-> listing URL/name, citation, license, retrieval date, and independent
-> label verification have not yet been recorded. The app labels it
-> **Kaggle Dataset** and does not claim that labels are verified
-> operational ground truth.
-
-The application reads a configured CSV file. Dashboard counts and
-data-quality indicators are calculated from the actual rows in that file
-rather than hardcoded demo values.
-
-> **Project status:** Research prototype. It is not a
-> production-ready, multi-user SaaS platform. See [Prototype Boundaries
-> and Limitations](#prototype-boundaries-and-limitations) before using
-> it with real customer data.
-
-## Table of Contents
-
--   [What Opslyra Does](#what-opslyra-does)
--   [Key Features](#key-features)
--   [Adaptive AI Mode](#adaptive-ai-mode)
--   [Incident Lab: Ten Workflows](#incident-lab-ten-workflows)
--   [Research Modules](#research-modules)
--   [Research Protocol and Reproducibility](#research-protocol-and-reproducibility)
--   [Technology Stack](#technology-stack)
--   [Dataset and Data Handling](#dataset-and-data-handling)
--   [NLP and Machine Learning](#nlp-and-machine-learning)
--   [Evaluation and Interpretation](#evaluation-and-interpretation)
--   [Installation and Local Setup](#installation-and-local-setup)
--   [Configuration](#configuration)
--   [How to Explore the Application](#how-to-explore-the-application)
--   [Run Tests](#run-tests)
--   [Project Data and Generated
-    Artifacts](#project-data-and-generated-artifacts)
--   [Prototype Boundaries and
-    Limitations](#prototype-boundaries-and-limitations)
--   [Potential Next Steps](#potential-next-steps)
-
-## What Opslyra Does
-
-Support teams receive tickets about billing, refunds, cancellations,
-technical issues, and other customer problems. Opslyra provides a local
-environment for exploring this information and testing ways NLP and
-machine learning might assist ticket review.
-
-The prototype focuses on four areas:
-
-1.  **Understand tickets:** search and inspect tickets, examine data
-    quality, and classify ticket type and priority from ticket text.
-2.  **Investigate patterns:** find similar historical tickets, explore
-    possible relationships between incidents, and inspect issue
-    clusters.
-3.  **Experiment with AI-assisted workflows:** switch between manual
-    handling, AI suggestions, and limited local automation.
-4.  **Study research ideas:** compare uncertainty-aware review
-    strategies, simulate constrained ticket routing, and explore
-    temporal incident fingerprints.
-
-The application uses the supplied ticket CSV as its source of ticket
-records. It does not connect to a live external ticketing service.
-
-## Key Features
-
-### 1. Support-Service Dashboard
-
-The main dashboard provides an operator-focused overview of the dataset,
-including:
-
--   A review queue that prioritizes open Critical and High priority
-    tickets.
--   Active and waiting ticket counts.
--   Ticket-category context and dataset-health indicators.
--   Short, rule-based next-step prompts.
--   Counts and summaries calculated from the loaded CSV.
-
-The queue guidance is a rule-based review aid. It is **not** a live SLA
-prediction.
-
-### 2. Searchable Ticket Explorer
-
-The ticket explorer supports searching, filtering, pagination, and a
-privacy-conscious ticket detail view. It helps operators inspect
-individual records without needing to work directly with the CSV.
-
-### 3. Dataset Quality Checks
-
-Opslyra checks the input data for:
-
--   Expected column names and schema compatibility.
--   Missing values by field.
--   Duplicate ticket IDs.
--   Observed label counts.
--   Whether timestamp fields can be parsed.
+Opslyra is a local Flask research prototype for exploring customer-support
+tickets, evaluating text-classification methods, and testing human-controlled
+AI-assisted workflows. It includes a ticket dashboard, model evaluation,
+Graphs, an Incident Lab, Adaptive AI controls, and reproducible research
+experiments.
+
+> **Research prototype:** Opslyra is not a production-ready, multi-user
+> service. It does not connect to a live ticketing system or send customer
+> replies. Read [limitations](#limitations) before using it with sensitive
+> data.
+
+## Screenshots
+
+The screenshots show the application UI; the underlying results are generated
+from the configured CSV at runtime.
+
+| Overview | Graphs |
+|---|---|
+| ![Opslyra overview dashboard](docs/screenshots/dashboard.png) | ![Grouped cross-validation and label-signal graphs](docs/screenshots/graphs.png) |
+
+| Adaptive AI | Research modules |
+|---|---|
+| ![Adaptive AI risk-coverage controls and preview](docs/screenshots/adaptive-ai.png) | ![Research modules](docs/screenshots/research.png) |
+
+## Results on the Bundled Dataset
+
+The following figures were recomputed from the checked-in
+`customer_support_tickets.csv` using the current code. The comparison uses
+three-fold `StratifiedGroupKFold`; normalized identical ticket text stays in
+one fold. The majority baseline is fitted separately on each training fold.
+
+| Prediction target | Labeled rows | Majority accuracy | TF-IDF + Logistic Regression | Difference |
+|---|---:|---:|---:|---:|
+| Ticket Priority | 8,469 | 25.88% | 24.06% | -1.82 percentage points |
+| Ticket Status | 8,469 | 34.02% | 33.85% | -0.17 percentage points |
+
+Neither target beats the majority baseline in this signal check. These results
+do not establish that the labels were randomly generated; they show that this
+text baseline does not provide an accuracy improvement under this evaluation.
+
+| Dataset audit | Current result |
+|---|---:|
+| Rows / expected columns | 8,469 / 17 |
+| Repeated rows by normalized ticket text | 144 |
+| Exact-text groups with at least one conflicting type, priority, or status | 104 |
+| Near-duplicate pairs at TF-IDF cosine similarity >= 0.92 | 6 of 400 sampled distinct texts |
+
+The near-duplicate scan is a deterministic sample, not a census. Of its six
+pairs, five had disjoint priority labels and two had disjoint status labels.
+The exact-text conflicts and weak baseline results are data-quality warnings,
+not proof that labels are incorrect.
+
+Results depend on the dataset and software versions. Run the audit and
+experiments again after changing the CSV; do not present these figures as
+future or production performance.
+
+## Features
+
+- **Dashboard and ticket explorer:** search, filter, inspect, and summarize the
+  configured ticket data.
+- **Privacy-conscious views:** customer names and email addresses are omitted
+  from ticket views; common personal identifiers and credential-like strings
+  are redacted from displayed/model text. Redaction is pattern-based and is not
+  a guarantee of anonymization.
+- **Ticket classification:** separate ticket-type and priority classifiers
+  using redacted subject and description text with TF-IDF features.
+- **Graphs (`/graphs`):** grouped cross-validated accuracy versus a
+  fold-local majority baseline, exact/near-duplicate label-conflict analysis,
+  and reliability diagrams/ECE for selectable classification targets. Graph
+  downloads are PNGs with 1200-DPI resolution metadata.
+- **Adaptive AI (`/adaptive-ai`):** manual, copilot, selective, autonomous,
+  and ticket takeover modes; target-specific validation risk–coverage
+  operating points; and a side-effect-free policy preview. Human acceptance
+  and correction rates are shown only when genuine reviewer events exist.
+- **Incident Lab (`/intelligence`):** ten local workflows, including
+  corrections, novelty, counterfactual exploration, similarity, routing and
+  SLA-risk simulations.
+- **Research (`/research`):** open-set detection as the primary experiment,
+  with supporting active-learning, constrained-routing, temporal,
+  calibration/ablation, and risk–coverage studies.
+- **Local audit trail and experiments:** workflow activity and experiment
+  records are stored locally under `instance/`.
+
+## Research and Reproducibility
+
+### Evaluation design
+
+The interactive model reports use repeated stratified, exact-text-grouped
+cross-validation across multiple seeds, descriptive confidence intervals,
+and a separate holdout when class support permits. A chronological
+train/test comparison is reported only when timestamps are explicitly
+trusted and sufficient data is available. The final model is fitted on
+eligible data for prediction; this is separate from the evaluation estimates.
+
+The Research baseline comparison includes majority class, Complement Naive
+Bayes, linear SVM, TF-IDF + Logistic Regression, and an embedding + Logistic
+Regression path. Sentence-transformer embeddings run only when the optional
+package and `OPSLYRA_EMBEDDING_MODEL` are configured; otherwise the embedding
+path uses TF-IDF + TruncatedSVD.
+
+### CLI
 
-Missing values are retained as missing values. The prototype does not
-silently fill them with invented data.
-
-### 4. NLP Ticket Classification
-
-The baseline NLP pipeline uses the ticket's **subject and description**
-to predict two targets independently:
-
--   Ticket type.
--   Ticket priority.
-
-It applies text preprocessing and TF-IDF vectorization, followed by
-Logistic Regression classifiers. Ticket IDs, customer names, customer
-emails, demographic fields, resolution text, and other post-outcome
-fields are excluded from predictive features.
-
-This is classical, lexical NLP. It is not a large language model and
-does not use pretrained semantic embeddings in the baseline classifier.
-
-### 5. Cross-Validation and Single-Ticket Prediction
-
-The application provides repeated stratified cross-validation, a
-separate final holdout where class support permits, and a form for
-predicting the ticket type and priority of an individual ticket. The
-final holdout is not used to select models. Reported intervals summarize
-seed/fold observations and are descriptive; they are not evidence of
-production performance or future-time generalization.
-
-### 6. Privacy-Conscious Ticket Views
-
-Customer names and email addresses are not displayed in ticket views or
-used as prediction features. Before ticket text is displayed or passed
-to the model, the application redacts common email addresses and
-phone-like strings. The Incident Lab also demonstrates pattern-based
-redaction for common email, username, IP-address, phone, and
-credential-like patterns.
-
-Pattern-based redaction is helpful but cannot guarantee detection of
-every sensitive value.
-
-## Adaptive AI Mode
-
-Adaptive AI Mode is available at **`/adaptive-ai`**. It demonstrates how
-ticket workflows can move between human-controlled handling and limited
-AI assistance without losing the local workflow history.
-
-### The Five Modes
-
-#### 1. Fully Manual
-
-The employee handles the ticket. AI does not execute ticket actions.
-This mode is useful when an operator wants complete manual control.
-
-#### 2. AI Copilot
-
-AI can provide ticket classification and priority suggestions and
-retrieve similar resolved tickets. Suggestions are presented for human
-review; the operator explicitly approves or rejects them.
-
-#### 3. Selective Automation
-
-The workflow can automatically save permitted category or priority
-labels when the configured score threshold is met. The current prototype
-stores these changes in a local SQLite overlay rather than modifying the
-original CSV.
-
-#### 4. Autonomous Workflow
-
-This mode demonstrates limited local automation for eligible tickets. It
-is not a fully autonomous production support agent: the current
-implementation can apply local category/priority overlays and retrieve
-similar historical tickets, but it does not send customer responses or
-operate external systems.
-
-#### 5. Human Takeover
-
-An employee can pause new AI workflows for a ticket and continue
-handling it manually. Mode, policy, and decision events are retained in
-the local activity timeline.
-
-### Ticket-Level and Workspace-Level Control
-
--   A workspace-level selector establishes the default workflow mode.
--   Individual tickets can override the workspace default.
--   A ticket can return to the workspace default when the override is no
-    longer needed.
--   The interface records local workflow activity so the demonstration
-    can show how decisions were made.
-
-### Confidence and Safety Checks
-
-The current prototype stops for human review in certain cases, including
-sensitive wording, critical recommendations, or a score below the
-configured threshold. The score threshold is **not calibrated
-confidence**, so these checks should be treated as demonstration
-safeguards rather than validated risk controls.
-
-### Important Scope Note
-
-Adaptive AI Mode is currently a local workflow demonstration. It does
-not provide user accounts, team membership, production role-based
-authorization, external team routing, a response-generation model, live
-ticket CRUD, external response sending, follow-up monitoring, or
-external resolution verification.
-
-## Incident Lab: Ten Workflows
-
-Open **Incident Lab** at **`/intelligence`** from the sidebar to explore
-the following workflows.
-
-### 1. Human-in-the-Loop Corrections
-
-Save agent corrections for ticket category, priority, or a manually
-labeled team. Review uncertain examples, train local models, inspect
-model versions, and roll back to a prior local model when available.
-
-Team models are trained only after reviewed examples contain at least
-two examples for each of at least two teams.
-
-### 2. Open-Set Incident Discovery
-
-Compare new ticket text with nearby records using TF-IDF distance and
-local-neighbor density. Text that appears unfamiliar can receive an
-explicit `UNKNOWN` outcome.
-
-This is a lexical novelty heuristic, not a pretrained semantic
-understanding model or independently validated out-of-distribution
-detector.
-
-### 3. Counterfactual Text Exploration
-
-Compare the model's output for the original ticket with hypothetical
-wording such as a "production-wide" issue versus a "single-user" issue.
-This helps demonstrate how changing words can change predictions.
-
-These are hypothetical text comparisons; they do not prove that the
-wording changes would cause a real-world operational outcome.
-
-### 4. Incident Relationship Graph
-
-Explore possible ticket links using text similarity, product
-information, extracted error codes, and timestamp proximity. The graph
-is an exploratory similarity view, not a verified dependency graph
-between incidents.
-
-### 5. SLA-Risk Sandbox
-
-Adjust priority, elapsed time, target, and queue-load assumptions in a
-transparent risk sandbox. The output is a configurable **risk index**,
-not a probability of breaching an actual SLA.
-
-### 6. Adaptive Routing Simulator
-
-Simulate routing using example team skills and capacity assumptions, and
-compare the result with an even or round-robin baseline. These team
-skills and capacities are illustrative assumptions, not learned from
-actual team assignment labels.
-
-### 7. Recurrence and Early-Warning Radar
-
-Inspect daily response-time ticket volumes and exploratory issue
-clusters. The available date range is limited, so the visualizations
-should be treated as exploratory rather than reliable recurrence
-forecasts.
-
-### 8. Privacy-Aware Processing
-
-Demonstrate pattern-based redaction for common email, username,
-IP-address, phone, and credential-like strings. The local audit stores
-counts rather than raw text for the redaction workflow.
-
-Redaction patterns can miss sensitive information and must not be
-treated as a complete privacy guarantee.
-
-### 9. Similar-Ticket and Resolution Retrieval
-
-Retrieve similar historical tickets and show their source ticket links
-and recorded resolutions when those resolutions are present in the CSV.
-No separate approved knowledge-base corpus is configured.
-
-### 10. Model Reliability and Drift Exploration
-
-Inspect class-distribution changes, holdout calibration metrics, local
-model versions, and rollback controls. These tools support local
-experimentation but do not constitute a complete production
-drift-monitoring or model-deployment service.
-
-## Research Modules
-
-Open **Research Modules** at **`/research`** to run open-set detection
-and supporting research experiments. These are implemented as
-experimental workflows; their effectiveness and novelty require
-separate validation.
-
-### Primary Module --- Open-Set Ticket Detection
-
-The open-set experiment holds out one or more complete ticket classes
-from model training. For each seed, it trains on known classes, selects
-rejection thresholds using validation-only known examples, and reports
-unknown-detection ranking metrics, known-class classification reports,
-confusion matrices, and privacy-redacted error examples on the untouched
-test split. ROC and precision–recall curves are shown per seed.
-
-The held-out categories are only a proxy for unseen tickets. This
-experiment does not establish detection of new incidents in production,
-and its small number of classes or seeds may make estimates unstable.
-Threshold results are tied to the selected dataset, split, and score
-method.
-
-### Supporting Module A --- Uncertainty-Gated Active Learning with Novelty-Aware Sampling
-
-This module lets you adjust queue weights, inspect a ticket-review
-queue, and compare four review strategies:
-
--   Random sampling.
--   Uncertainty-only sampling.
--   Diversity-only sampling.
--   Combined uncertainty and diversity sampling.
-
-The strategies are compared under identical annotation budgets using
-macro-F1, rare-class recall, and estimated annotation minutes.
-
-**How the demonstration works:** it uses a deterministic stratified
-sample of up to 1,600 labeled tickets and an offline oracle simulation
-in which existing ground-truth labels are revealed to simulate review.
-The strategies share the same seed labels, test set, and acquisition
-checkpoints. Keyword impact and text length are proxies, not measured
-human annotation effort.
-
-Therefore, the benchmark does not establish real annotation savings or
-prove that active learning will improve results in a live support
-organization.
-
-### Supporting Module B --- Counterfactual Incident Routing with Operational Constraints
-
-This module compares ticket-text scenarios and examines:
-
--   Model predictions.
--   Skill-capable example teams.
--   Queue workload and capacity assumptions.
--   Explanation stability.
--   Constraint validity.
--   Simulated SLA feasibility.
-
-The CSV has no ground-truth assigned-team labels. Routing accuracy is
-therefore reported as unavailable rather than fabricated. Team skills,
-workloads, processing-time formulas, and SLA budgets are simulation
-parameters. Counterfactual phrasing stability is evaluated over three
-generated variants and is only a small diagnostic, not a human-validated
-explanation study.
-
-### Supporting Module C --- Temporal Incident Fingerprinting and Recurrence Forecasting
-
-This module compares TF-IDF with a combined fingerprint using reduced
-text-latent features from TruncatedSVD, product/error-code indicators,
-and response-time features. It reports exploratory clustering and
-resampled-cluster stability, and provides a small chronological
-comparison when enough dated observations are available.
-
-The current dataset contains only a few response-time dates. As a
-result, reliable recurrence forecasting is not supported by the
-available data. Event precision and recall are unavailable because the
-dataset does not contain incident labels.
-
-## Research Protocol and Reproducibility
-
-The `/research` form saves JSON records for completed audits, model
-evaluation, open-set experiments, calibration/ablation, and risk–coverage
-simulations under `instance/experiments/`. Each record includes its
-configuration, dataset fingerprint, software versions, and metrics.
-These reports are local generated data and are not committed.
-
-To run the bundled experiment suite from PowerShell:
+Python 3.10+ is supported through the compatibility requirements. The pinned
+test environment uses Python 3.13.1. From the repository root:
 
 ```powershell
-python experiments.py --output instance/experiments --seeds 0,1,2 reproduce
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-lock.txt
+python experiments.py --output instance/experiments --seeds 0,1,2 --folds 3 --max-rows 800 reproduce
 ```
 
-All shared options go before the subcommand. Individual commands include
-`audit`, `evaluate`, `ablation`, `openset`, and `risk-coverage`. For
-example, hold out a named ticket type:
+If GNU Make is installed, the same standard experiment suite can be run with:
+
+```sh
+make reproduce
+```
+
+Make variables can be overridden, for example:
+
+```sh
+make reproduce PYTHON=python SEEDS=0,1,2 MAX_ROWS=800
+```
+
+The suite writes dataset audit, model evaluation, calibration/ablation,
+open-set, and risk–coverage JSON records under `instance/experiments/`.
+Individual commands are `audit`, `evaluate`, `ablation`, `openset`,
+`risk-coverage`, and `kappa`. Options go before the subcommand. For example:
 
 ```powershell
 python experiments.py --output instance/experiments --seeds 0,1,2 --unknown "Refund request" openset
 ```
 
-The runner does not fabricate a missing target, use the test split for
-threshold selection, or treat unverified timestamps as trustworthy.
-Actual output depends on the selected CSV, its provenance sidecar, and
-the installed software versions. Review each JSON report's warnings and
-limitations before interpreting a score.
+Independent label agreement is not currently measured. To calculate Cohen's
+kappa from two independently produced annotation CSVs, see
+[the annotation guide](docs/ANNOTATION_GUIDE.md). Do not treat the bundled
+labels as independently verified operational ground truth.
 
-Independent label agreement is currently **not measured**. No
-independently verified operational labels are included. See the
-[annotation guide](docs/ANNOTATION_GUIDE.md) for a privacy-conscious,
-independent annotation and Cohen's kappa workflow.
+## Dataset and Provenance
 
-## Technology Stack
+The bundled CSV has 8,469 rows and 17 required columns, including ticket
+subject, description, type, status, and priority. The project identifies the
+file as sourced from Kaggle. The exact Kaggle listing, citation, license,
+retrieval date, and independent verification of labels/timestamps have not
+been recorded. Check the original Kaggle terms before redistribution or reuse;
+the repository's MIT license does **not** license the dataset.
 
-The current project is a local Python web application.
+Missing values remain missing in the raw and analysis data. They are not
+replaced with invented labels. The current CSV has 5,700 missing values in
+each of `Resolution`, `Time to Resolution`, and `Customer Satisfaction
+Rating`, and 2,819 in `First Response Time`. Counts should be recomputed if
+the dataset changes.
 
-  -----------------------------------------------------------------------
-  Area                                Technology or approach
-  ----------------------------------- -----------------------------------
-  Backend                             Python and Flask
+To use another CSV, set `TICKETMIND_DATASET` to its path. Include all required
+columns. A provenance sidecar named `<csv-filename>.provenance.json` should
+record source, citation, license, retrieval date, and label/timestamp
+verification status. See the example in [Configuration](#configuration).
 
-  Frontend                            HTML and CSS with the existing
-                                      project templates and interface
-
-  Ticket data                         CSV file configured through an
-                                      environment variable or default
-                                      path
-
-  Local workflow state                SQLite-backed local overlays and
-                                      state under `instance/`
-
-  NLP text features                   TF-IDF vectorization
-
-  Baseline classifiers                scikit-learn Logistic Regression
-
-  Research workflows                  scikit-learn text similarity,
-                                      dimensionality reduction,
-                                      clustering, and evaluation
-                                      utilities
-
-  Charts and dashboard                Existing application views and
-                                      interactive visualizations
-
-  Tests                               pytest
-  -----------------------------------------------------------------------
-
-The implementation should be described according to the code that is
-present. Do not assume it uses a transformer model, a production
-database, a background task queue, or an external ticketing API unless
-those components have actually been added.
-
-## Dataset and Data Handling
-
-The supplied dataset is expected to contain these 17 columns:
-
-1.  `Ticket ID`
-2.  `Customer Name`
-3.  `Customer Email`
-4.  `Customer Age`
-5.  `Customer Gender`
-6.  `Product Purchased`
-7.  `Date of Purchase`
-8.  `Ticket Type`
-9.  `Ticket Subject`
-10. `Ticket Description`
-11. `Ticket Status`
-12. `Resolution`
-13. `Ticket Priority`
-14. `Ticket Channel`
-15. `First Response Time`
-16. `Time to Resolution`
-17. `Customer Satisfaction Rating`
-
-The current Kaggle-sourced CSV has **8,469 rows** and all 17 expected columns.
-It contains five observed ticket types, four priorities, three statuses,
-and four channels. The application reports observed values rather than
-forcing the data into a narrower assumed taxonomy. Ticket IDs are unique
-in the current file.
-
-Some fields are missing in many rows:
-
--   `Resolution`, `Time to Resolution`, and
-    `Customer Satisfaction Rating` are blank in 5,700 rows.
--   `First Response Time` is blank in 2,819 rows.
-
-These counts describe the supplied dataset and should be rechecked if
-the CSV changes. The application calculates its dashboard values at
-runtime. Timestamp fields are checked for parseability; the prototype
-does not infer elapsed times or actual SLA outcomes from them.
-
-The current exact-text audit found 144 duplicate rows and 104 duplicated
-text groups with at least one conflicting ticket-type, priority, or
-status label. Re-run the audit when the data changes. Evaluation keeps
-normalized identical text within a single split; conflicting labels are
-still present in the source and remain a data-quality limitation.
-
-On the supplied CSV, 3-fold exact-text-grouped cross-validation gives
-priority accuracy of 24.1% versus a 25.9% fold-local majority baseline,
-and status accuracy of 33.9% versus 34.0%. The labels are nearly uniform
-in frequency, and this text model does not improve accuracy over the
-baseline. A deterministic sample of 400 distinct texts produced six
-near-duplicate pairs at cosine similarity 0.92 or higher; five had
-disjoint priority labels and two had disjoint status labels. This
-sampled scan is not a census, and these results do not prove the labels
-were generated randomly.
-
-The dataset uses `@example.com` email addresses as a dataset
-characteristic. The app does not render customer names or emails in
-ticket views and excludes them from predictive features.
-
-### Expected CSV Location
-
-By default, Opslyra looks for:
-
-``` text
-customer_support_tickets.csv
-```
-
-in the same directory as `app.py`. You can point the application to
-another CSV using `TICKETMIND_DATASET`; see
-[Configuration](#configuration).
-
-## NLP and Machine Learning
-
-### Prediction Targets
-
-Ticket type and ticket priority are trained as separate classification
-targets.
-
-### Predictive Inputs
-
-The current baseline uses redacted `Ticket Subject` and
-`Ticket Description` text. It excludes:
-
--   Ticket IDs.
--   Customer names and email addresses.
--   Demographic fields.
--   Resolution text.
--   Other fields that would expose information unavailable at the time
-    of ticket creation or reveal the outcome.
-
-This helps reduce leakage and keeps the baseline focused on the text
-available when a ticket is first reviewed.
-
-### Baseline Pipeline
-
-At a high level, the baseline pipeline:
-
-1.  Reads the CSV and checks the expected schema.
-2.  Redacts common sensitive patterns from ticket text.
-3.  Combines the subject and description for text analysis.
-4.  Converts text into TF-IDF features.
-5.  Trains separate Logistic Regression classifiers for ticket type and
-    priority.
-6.  Evaluates predictions on a reproducible stratified holdout.
-7.  Uses the saved model for single-ticket predictions and supported
-    workflow demonstrations.
-
-Model training is performed explicitly rather than on every page
-request. Local model artifacts and version metadata are stored under
-`instance/`.
-
-### Model Confidence Warning
-
-The maximum predicted class probability is **not calibrated
-confidence**. A high value should not automatically be interpreted as a
-reliable probability that a prediction is correct. The holdout report
-includes expected calibration error and a multiclass Brier score, but
-the prototype does not calibrate the model or establish that the metrics
-generalize to future tickets.
-
-## Evaluation and Interpretation
-
-The prototype supports reproducible experiments, but results must be
-interpreted in context.
-
--   **Classification:** the random holdout measures performance on one
-    final stratified split, when available; repeated cross-validation
-    provides additional seed/fold summaries.
--   **Graphs:** `/graphs` compares full-dataset 3-fold grouped
-    cross-validated accuracy for priority and status against a
-    fold-local majority baseline. Exact normalized texts stay within one
-    fold. Its near-duplicate scan compares a deterministic sample of up
-    to 400 distinct texts at TF-IDF cosine similarity of 0.92 or higher;
-    it is not a census. Each graph can be downloaded as a PNG with
-    1200-DPI resolution metadata.
--   **Calibration:** the reported calibration metrics describe the
-    holdout and do not mean the model has been calibrated.
--   **Novelty detection:** the threshold is estimated from within-corpus
-    neighbors and is not independently validated against
-    out-of-distribution examples.
--   **Open-set detection:** thresholds are selected using validation-only
-    known-class examples; held-out categories are proxies for unseen
-    tickets, not operational incident ground truth.
--   **Routing:** the dataset has no assigned-team ground truth, so real
-    routing accuracy cannot be measured.
--   **SLA risk:** no actual SLA targets or breach labels are supplied.
--   **Temporal analysis:** the available response-time dates are too
-    limited for reliable recurrence claims.
--   **Research novelty:** the modules are research candidates, not proof
-    of a novel or superior method.
-
-Do not add or report fabricated accuracy, F1 scores, time savings,
-routing success rates, or business outcomes. Use the values produced by
-the running application and document the evaluation setup.
-
-## Installation and Local Setup
-
-For a concise Windows quick start, see [howtorun.txt](howtorun.txt).
-
-### Requirements
-
--   Python 3.13.1 is the version used for the pinned test environment.
--   Python 3.10 or newer may use the compatibility ranges in
-    `requirements.txt`; the exact lock is intended for Python 3.13.
--   The project source files.
--   The supplied CSV, unless you configure a different dataset path.
+## Installation and Run
 
 ### Windows PowerShell
 
-From the project directory, run:
-
-``` powershell
+```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-lock.txt
-$env:OPSLYRA_SECRET_KEY = "replace-this-with-a-long-random-value"
+$env:OPSLYRA_SECRET_KEY = "use-a-long-random-secret"
 python app.py
 ```
 
-Then open:
+Open <http://127.0.0.1:5000>. To use a different CSV:
 
-<http://127.0.0.1:5000>
-
-Use a persistent, randomly generated secret for your own local
-environment. Do not commit secrets to version control.
-
-### Configure a Different CSV
-
-In PowerShell:
-
-``` powershell
-$env:TICKETMIND_DATASET = "C:\path\to\customer_support_tickets.csv"
+```powershell
+$env:TICKETMIND_DATASET = "C:\path\to\tickets.csv"
 python app.py
 ```
 
-The CSV must contain all 17 expected columns listed in [Dataset and Data
-Handling](#dataset-and-data-handling).
+On other platforms, create/activate a virtual environment and install the
+appropriate requirements file. Use `requirements-lock.txt` for the pinned
+Python 3.13.1 environment; use `requirements.txt` for the supported
+compatibility range.
 
-For a different CSV, place a JSON provenance file beside it using the
-name `<csv-filename>.provenance.json` (for example,
-`tickets.csv.provenance.json`). Record the source, citation, license,
-retrieval date, and label/timestamp verification status. The application
-defaults unrecognized CSVs to an unverified external dataset; malformed
-sidecars are reported as data errors rather than silently ignored.
+### Configuration
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `TICKETMIND_DATASET` | Input CSV | `customer_support_tickets.csv` beside `app.py` |
+| `OPSLYRA_SECRET_KEY` | Flask session signing key | Random per process if unset |
+| `HOST` | Development server bind address | `127.0.0.1` |
+| `PORT` | Development server port | `5000` |
+| `FLASK_DEBUG` | Enable Flask debug mode when set to `true` | Disabled |
+
+For alternate datasets, place a JSON file beside the CSV with `.provenance.json`
+appended to its filename:
 
 ```json
 {
@@ -658,215 +210,59 @@ sidecars are reported as data errors rather than silently ignored.
 }
 ```
 
-Only set `labels_verified` or `timestamps_trustworthy` to `true` when the
-relevant evidence has been independently checked and documented. The
-repository's supplied demo CSV has no verified source/license decision;
-do not infer reuse rights from its presence here.
+Only mark labels or timestamps verified when the supporting evidence has been
+independently checked and documented.
 
-### Other Operating Systems
+## Tests and CI
 
-Create and activate a virtual environment using your operating system's
-Python commands. For the tested Python 3.13 environment, install from
-`requirements-lock.txt`; for other supported versions, install from
-`requirements.txt`. Set the
-environment variables described below, and run `python app.py`.
+Run the test suite locally:
 
-## Configuration
-
-  -----------------------------------------------------------------------
-  Variable                            Purpose
-  ----------------------------------- -----------------------------------
-  `OPSLYRA_SECRET_KEY`                Preferred Flask session secret. Set
-                                      a long, random, persistent value.
-
-  `TICKETMIND_SECRET_KEY`             Legacy secret variable accepted by
-                                      the prototype.
-
-  `TICKETMIND_DATASET`                Optional path to the CSV file. If
-                                      omitted, the default CSV beside
-                                      `app.py` is used.
-  -----------------------------------------------------------------------
-
-Do not expose the local development server to the public internet. A
-configured Flask secret does not add authentication or tenant isolation.
-
-## How to Explore the Application
-
-1.  **Open the dashboard** to review ticket counts, queue guidance, and
-    data-quality indicators.
-2.  **Open the ticket explorer** to search and filter tickets, then
-    inspect a ticket's privacy-conscious detail view.
-3.  **Try ticket prediction** to see the baseline ticket-type and
-    priority classifiers.
-4.  **Open Incident Lab** from the sidebar, or visit `/intelligence`, to
-    explore the ten workflows.
-5.  **Open Adaptive AI** at `/adaptive-ai` to switch workspace and
-    ticket-level modes, inspect recommendations, approve or reject
-    Copilot suggestions, and try manual takeover.
-6.  **Open Research Modules** at `/research` to compare the
-    primary open-set experiment and its supporting studies.
-7.  **Open Graphs** at `/graphs` to compare priority and status
-    cross-validated accuracy against a majority baseline and inspect
-    exact/near-duplicate label conflicts.
-8.  **Review generated local state** under `instance/` to inspect local
-    model artifacts and workflow-related data created by the prototype.
-
-Correction examples are linked to their source ticket IDs. Model
-artifacts are created only when a training action is explicitly
-triggered.
-
-## Run Tests
-
-From the project directory, run:
-
-``` powershell
+```powershell
 python -m pytest -q
 ```
 
-For the pinned test environment, install `requirements-lock.txt` first.
-GitHub Actions runs this suite on Python 3.10 using compatibility ranges
-and on Python 3.13.1 using the exact lock.
-Review the test output and resolve failures before presenting the
-project as verified. Test results depend on the code and environment in
-which the command is run.
+GitHub Actions runs pytest on Python 3.10 using `requirements.txt` and Python
+3.13.1 using the exact pins in `requirements-lock.txt`. The workflow is
+`.github/workflows/ci.yml`.
 
-## Project Data and Generated Artifacts
+## CSRF Protection
 
-The `instance/` directory stores local state such as:
+All unsafe HTTP methods are checked by a global Flask request hook against a
+session-bound CSRF token. HTML forms submit the token as a form field, and
+JSON requests send it in the `X-CSRF-Token` header. Requests without a valid
+token are rejected with HTTP 403. This is a local prototype safeguard; it is
+not authentication or authorization.
 
--   Agent corrections and local label overlays.
--   Workflow preferences and activity events.
--   Count-only audit records for supported redaction workflows.
--   Model metadata, model versions, and trained artifacts.
+## Technology
 
-This directory is excluded from source control. Treat generated
-artifacts and local state as data: do not publish them if they contain
-sensitive or proprietary information.
+- Python, Flask, SQLite
+- pandas, NumPy, SciPy, scikit-learn
+- HTML, CSS, JavaScript, and inline SVG/chart visualizations
+- pytest and GitHub Actions
 
-## Prototype Boundaries and Limitations
+## Limitations
 
-The following limitations are important when demonstrating, evaluating,
-or extending Opslyra.
+- This is a single-user local research prototype, not an authenticated
+  multi-user service or production ticketing system.
+- Dataset identity is attributed to Kaggle by the project owner, but its
+  exact source citation, terms, and label verification are not recorded.
+- Confidence scores are not automatically calibrated. Risk–coverage points
+  are validation diagnostics and do not guarantee future risk.
+- Open-set held-out classes are proxies for unseen incidents, not verified
+  out-of-distribution production events.
+- The ticket dataset has no assigned-team ground truth or verified SLA-breach
+  labels; routing and SLA outcomes are simulations.
+- Available response-time dates are insufficient for reliable recurrence
+  forecasting.
+- Redaction uses patterns and does not guarantee removal of all personal or
+  sensitive information.
 
-### No Production Authentication or Tenant Isolation
+## License
 
-The prototype has no user accounts, team membership, or production
-role-based access control. Adaptive AI modes are local workflow
-controls, not an authorization system. Do not use it as a publicly
-accessible service or with real customer personally identifiable
-information without adding and independently validating appropriate
-controls.
+Opslyra source code and project documentation are licensed under the MIT
+License; see [LICENSE](LICENSE). The dataset and any third-party materials
+are excluded from that grant and remain subject to their own terms.
 
-### No Live External Ticket Actions
+---
 
-Ticket rows remain read-only records from the source CSV. Selective
-Automation and Autonomous Workflow currently save only local
-category/priority overlays and support read-only similar-ticket
-retrieval. They do not:
-
--   Send customer responses.
--   Route tickets to real external teams.
--   Monitor real follow-ups.
--   Verify resolutions in an external ticketing system.
--   Connect to external payment, email, or ticketing services.
-
-### SLA and Routing Are Simulations
-
-The dataset has no SLA targets, SLA breach labels, queue workloads, or
-assigned-team labels. SLA risk is a configurable heuristic index, and
-team skills and capacities are example assumptions. No real tickets are
-routed by the simulator.
-
-### Novelty Detection Is Lexical
-
-The open-set detector uses TF-IDF cosine distance and average
-nearest-neighbor density. It does not use a pretrained semantic
-embedding model. Its threshold is estimated from within-corpus neighbors
-and is not independent out-of-distribution validation.
-
-### Counterfactuals Are Not Causal Evidence
-
-Hypothetical wording changes show how model outputs respond to changed
-text. They do not prove causal effects in real support operations.
-
-### Incident Links Are Exploratory
-
-The relationship graph is based on similarity signals and should not be
-interpreted as a verified incident dependency graph. Resolution
-retrieval can only use resolutions present in the CSV; no approved
-knowledge-base corpus is configured.
-
-### Temporal Evidence Is Limited
-
-The first-response data spans only a few days. The current dataset does
-not support reliable seasonal analysis or strong recurrence-forecasting
-claims.
-
-### Privacy Redaction Is Not Complete Protection
-
-Pattern-based redaction can miss sensitive values. Although the
-supported local audit stores counts rather than raw text, the absence of
-authentication and role-based access control makes this unsuitable for
-public deployment or real customer data.
-
-### Model Operations Are Local
-
-Model versions can be activated or rolled back for demonstration
-purposes. There is no production model deployment path, formal
-deployment approval workflow, or complete drift-monitoring service.
-Class-distribution changes and holdout scores are not a substitute for
-ongoing production monitoring.
-
-### Research Modules Have Experimental Boundaries
-
--   **Module A:** uses a deterministic sample of up to 1,600 labeled
-    tickets and an offline oracle simulation. Estimated review costs are
-    proxies, not measured human effort.
--   **Module B:** uses simulated team skills, workloads, processing
-    times, and SLA budgets because ground-truth routing outcomes are
-    absent.
--   **Module C:** uses TF-IDF features reduced with TruncatedSVD,
-    product/error-code indicators, and response-time features rather
-    than pretrained semantic embeddings. The small chronological
-    comparison is not enough to validate recurrence forecasting.
-
-### Not Yet a Production SaaS
-
-Opslyra is a single-workspace research prototype. Production use would
-require, at minimum, authentication, tenant isolation, role-based
-authorization, secure deployment, rate limiting, validated privacy
-controls, real SLA and assignment data, time-aware evaluation,
-background processing where appropriate, and formal model/action
-approval policies.
-
-Research novelty and effectiveness require a separate literature and
-prior-art review plus adequately powered, reproducible experiments. This
-README does not claim that the research modules are proven novel or
-superior.
-
-## Potential Next Steps
-
-Possible extensions for a future version include:
-
--   Add authentication, organization and team membership, and enforce
-    role-based permissions.
--   Add a writable ticket database and controlled CSV import workflow.
--   Integrate real ticketing, email, or knowledge-base systems through
-    explicit adapters.
--   Add an approved response-generation model with source-grounded
-    retrieval and review policies.
--   Calibrate model probabilities using an appropriate validation set.
--   Collect real assignment, SLA, escalation, and incident labels.
--   Evaluate models using chronological splits and monitor performance
-    over time.
--   Add formal approval gates, rollback policies, and robust audit
-    retention before enabling external actions.
-
-These are potential extensions, not claims about functionality already
-present.
-
-------------------------------------------------------------------------
-
-**Opslyra --- From Every Ticket to Intelligent Action.**
-#   O p s l y r a - - - Y o u r - n e x t - t i c k e t - t o - a c t - o n - a t - a - g l a n c e  
- 
+**Opslyra — From Every Ticket to Intelligent Action.**
