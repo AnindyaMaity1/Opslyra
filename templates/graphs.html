@@ -82,7 +82,7 @@
       </table>
     </div>
   </details>
-  <p class="graph-method-note">Each fold fits a TF-IDF word-unigram logistic-regression model and its majority-class baseline on training rows only. Normalized exact-text groups stay within one fold. Near-duplicate but nonidentical text can still cross folds. Accuracy is descriptive and does not establish label quality or operational usefulness.</p>
+  <p class="graph-method-note">Each fold fits a TF-IDF word-unigram logistic-regression model and its majority-class baseline on training rows only. Normalized exact-text groups stay within one fold. Near-duplicate but nonidentical text can still cross folds. </p>
   {% else %}
   <div class="notice-box">A grouped cross-validation comparison could not be calculated: {{ signals["Ticket Priority"].warning or signals["Ticket Status"].warning }}</div>
   {% endif %}

@@ -356,9 +356,11 @@ def routing_simulation(
         "skill_match": [
             {
                 "team": team["name"],
+                "skills": team["skills"],
                 "tickets": routed[team["name"]],
                 "capacity": team["capacity"],
                 "utilization": routed[team["name"]] / team["capacity"],
+                "round_robin_tickets": int(total / len(teams)),
             }
             for team in teams
         ],

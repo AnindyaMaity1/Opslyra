@@ -4,6 +4,7 @@ import csv
 import json
 from pathlib import Path
 
+import joblib
 import pandas as pd
 import pytest
 
@@ -236,6 +237,12 @@ def test_adaptive_workspace_modes_require_csrf_and_persist(client):
     assert response.status_code == 200
     assert response.json["mode"] == "copilot"
     assert client.get("/adaptive-ai").data.find(b"AI Copilot") >= 0
+
+
+@pytest.mark.parametrize("path", ["/models", "/predict", "/intelligence", "/research"])
+def test_html_write_endpoints_require_csrf(client, path):
+    response = client.post(path, data={})
+    assert response.status_code == 403
 
 
 def test_copilot_recommendations_require_human_decision_and_are_idempotent(client):
@@ -586,6 +593,8 @@ def test_empty_dataset_is_rejected_with_clear_error(tmp_path):
 def test_quality_page_renders_schema_and_label_checks(client):
     response = client.get("/data-quality")
     assert response.status_code == 200
+    assert b"Validation:</strong> no schema or parseability issues" not in response.data
+    assert b"treated as source timestamp fields here" not in response.data
     assert b"Schema and numeric checks" in response.data
     assert b"case or whitespace" not in response.data
     assert b"Ticket Type" in response.data
@@ -596,11 +605,42 @@ def test_tickets_have_pagination(client):
     assert response.status_code == 200
     assert b"Page 1 of 5" in response.data
     assert b"Next" in response.data
+    assert b"Ticket inbox" in response.data
+    assert b"Total tickets" in response.data
+    assert b"Critical priority" in response.data
+    assert b"High priority" in response.data
+    assert b"Ticket details" in response.data
+    assert b"ticket-stat-decoration" not in response.data
+    assert b"ticket-type-pill" in response.data
+    assert response.data.count(b'class="ticket-subject"') == 10
+    assert b">Channel</th>" not in response.data
+    assert b">Product</th>" not in response.data
+
+
+def test_ticket_detail_renders_full_width_description_and_attributes(client):
+    response = client.get("/tickets/1")
+
+    assert response.status_code == 200
+    assert b"Ticket description" in response.data
+    assert b"Ticket attributes" in response.data
+    assert b"Date of purchase" in response.data
+    assert response.data.count(b'class="ticket-attribute attribute-') == 6
+    assert b"First response" not in response.data
+    assert b"Time to resolution" not in response.data
+    assert b"Customer satisfaction" not in response.data
+    assert b"03 / WORKFLOW" not in response.data
+    assert b"ticket-ai-card" not in response.data
+    assert b"Customer Name" not in response.data
+    assert b"Customer Email" not in response.data
 
 
 def test_intelligence_dashboard_exposes_all_ten_workflows(client):
     response = client.get("/intelligence")
     assert response.status_code == 200
+    assert b"Evidence boundary" not in response.data
+    assert b"relationship-center-card" in response.data
+    assert b'<a href="/tickets/' in response.data
+    assert b'class="relationship-card relationship-tone-' in response.data
     for heading in (
         b"Human-in-the-loop learning",
         b"Open-set incident discovery",
@@ -644,6 +684,22 @@ def test_sla_sandbox_changes_with_user_inputs(client):
     assert b">100<" in higher.data
 
 
+def test_routing_simulator_shows_team_capacity_and_baseline(client):
+    response = post_form(
+        client,
+        "/intelligence",
+        {"action": "routing", "capacity_factor": "1"},
+    )
+
+    assert response.status_code == 200
+    assert b"Tickets simulated" in response.data
+    assert b"Capacity coverage" in response.data
+    assert b"Unassigned" in response.data
+    assert b"Capacity utilization" in response.data
+    assert b"Round-robin baseline" in response.data
+    assert b"Technical issue" in response.data
+
+
 def test_feedback_training_versions_and_rollback(client):
     initial = post_form(client, "/intelligence", {"action": "train"})
     assert initial.status_code == 302
@@ -668,6 +724,11 @@ def test_feedback_training_versions_and_rollback(client):
     assert len(versions) == 2
     assert versions[0]["active"] == 1
     assert versions[0]["metrics"]["Ticket Type"]["reviewed_examples"] == 1
+    history = client.get("/intelligence")
+    assert history.data.count(b'<article class="version-card') == 2
+    assert b"training examples" in history.data
+    assert b"target report(s)" in history.data
+    assert b"Rollback to v" in history.data
 
     rollback = post_form(
         client,
@@ -676,6 +737,28 @@ def test_feedback_training_versions_and_rollback(client):
     )
     assert rollback.status_code == 302
     assert store.model_versions()[1]["active"] == 1
+
+
+def test_observatory_shows_one_extra_saved_model_version(client):
+    store = client.application.extensions["ticketmind_state"]
+    metrics = {
+        "Ticket Type": {"accuracy": 0.20},
+        "Ticket Priority": {"accuracy": 0.25},
+    }
+    for version in range(7):
+        store.add_model_version(
+            f"model-{version}.joblib",
+            metrics,
+            training_examples=12_703,
+        )
+
+    response = client.get("/intelligence")
+
+    assert response.status_code == 200
+    assert response.data.count(b'<article class="version-card') == 6
+    assert b"12,703" in response.data
+    assert b"Ticket Type accuracy" in response.data
+    assert b"Ticket Priority accuracy" in response.data
 
 
 def test_privacy_scan_redacts_identifiers_and_logs_counts(client):
@@ -880,6 +963,16 @@ def test_models_page_renders_repeated_cv_and_chronological_status(
     client, small_dataset
 ):
     frame = pd.read_csv(small_dataset)
+    ticket_types = [
+        "Billing inquiry",
+        "Cancellation request",
+        "Product inquiry",
+        "Refund request",
+        "Technical issue",
+    ]
+    frame["Ticket Type"] = [
+        ticket_types[index % len(ticket_types)] for index in frame.index
+    ]
     frame["Ticket Subject"] = [
         f"{frame.at[index, 'Ticket Type']} unique subject {index}"
         for index in frame.index
@@ -893,6 +986,10 @@ def test_models_page_renders_repeated_cv_and_chronological_status(
     assert response.status_code == 200
     assert b"up to 3-fold stratified cross-validation" in response.data
     assert b"Repeated grouped CV" in response.data
+    assert b"class-score-card" in response.data
+    assert b"class-score-ring" in response.data
+    assert b"class-chart-refund-technical" in response.data
+    assert response.data.count(b"class-score-card-paired") == 2
     assert b"Chronological holdout" in response.data
     assert b"not been verified" in response.data
 
@@ -904,14 +1001,88 @@ def test_models_page_explains_when_grouped_cv_is_unavailable(client):
     assert b"Chronological holdout" in response.data
 
 
+def test_models_page_retrains_legacy_report_artifact(client):
+    app = client.application
+    dataset_path = Path(app.config["DATASET_PATH"]).resolve()
+    stat = dataset_path.stat()
+    artifact_path = Path(app.config["MODEL_ARTIFACTS"]) / "legacy-report.joblib"
+    legacy_report = {
+        "status": "Stratified holdout",
+        "training_rows": 48,
+        "test_rows": 12,
+        "labeled_rows": 48,
+        "accuracy": 0.5,
+        "macro_f1": 0.5,
+        "weighted_f1": 0.5,
+        "expected_calibration_error": 0.1,
+        "multiclass_brier_score": 0.5,
+        "classes": {},
+    }
+    joblib.dump(
+        {
+            "estimators": {},
+            "reports": {
+                "Ticket Type": legacy_report,
+                "Ticket Priority": legacy_report,
+            },
+            "dataset_fingerprint": (
+                str(dataset_path),
+                stat.st_mtime_ns,
+                stat.st_size,
+            ),
+        },
+        artifact_path,
+    )
+    store = app.extensions["ticketmind_state"]
+    store.add_model_version(
+        artifact_path,
+        {"Ticket Type": legacy_report, "Ticket Priority": legacy_report},
+        48,
+    )
+
+    response = client.get("/models")
+
+    assert response.status_code == 200
+    assert b"Repeated grouped CV" not in response.data
+    active_version = next(
+        item for item in store.model_versions() if item["active"]
+    )
+    refreshed_artifact = joblib.load(active_version["artifact_path"])
+    assert active_version["artifact_path"] != str(artifact_path.resolve())
+    assert "cross_validation" in refreshed_artifact["reports"]["Ticket Type"]
+
+
 def test_research_page_renders_differentiator_modules(client):
     response = client.get("/research")
     assert response.status_code == 200
+    assert b'<div class="research-flow" aria-label="Research experiments">' in response.data
+    assert response.data.count(b'class="panel research-panel') == 5
+    assert b"Dataset fit:" not in response.data
+    assert b"Interpretation:" not in response.data
+    assert b"The fingerprint combines 64-or-fewer" not in response.data
+    assert b"dated tickets \xc2\xb7" not in response.data
     assert b"Known-class classification and unseen-class rejection" in response.data
     assert b"Run open-set experiment" in response.data
     assert b"UNCERTAINTY-GATED ACTIVE LEARNING" in response.data
     assert b"COUNTERFACTUAL INCIDENT ROUTING" in response.data
     assert b"TEMPORAL INCIDENT FINGERPRINTING" in response.data
+    for removed_note in (
+        b"Recurrence forecasting is withheld",
+        b"Unavailable: no incident/event ground-truth labels exist",
+        b"Routing policy is learned only after enough human-reviewed team labels exist",
+        b"Impact is a text-keyword proxy",
+        b"The benchmark samples up to 1,600 labeled records",
+    ):
+        assert removed_note not in response.data
+    assert b'name="description" rows="1"' in response.data
+    assert b"class=\"routing-submit-row\"" in response.data
+    assert b"routing-compare-button" in response.data
+    assert b"queue-rerank-button" in response.data
+    assert b"class=\"button button-secondary button-research-green\"" in response.data
+    assert b"baseline-compare-form" in response.data
+    assert b"openset-seed-field" in response.data
+    assert b"openset-run-button" in response.data
+    assert b"routing-compare-button" in response.data
 
 
 def test_graphs_page_shows_grouped_accuracy_comparison_and_duplicate_audit(

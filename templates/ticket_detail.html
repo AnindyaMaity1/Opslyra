@@ -3,59 +3,46 @@
 {% block breadcrumb %}<a href="{{ url_for('tickets') }}">Tickets</a><span class="crumb-divider">/</span> #{{ ticket["Ticket ID"] }}{% endblock %}
 {% block content %}
 <section class="page-heading compact-heading">
-  <div><div class="eyebrow"><span class="eyebrow-line"></span> TICKET DETAILS</div><h1>{{ ticket["Ticket Subject"] or "Untitled ticket" }}</h1><p class="subtitle">Ticket #{{ ticket["Ticket ID"] }} · Personal identifiers are hidden</p></div>
+  <div class="ticket-detail-heading">
+    <div class="eyebrow"><span class="eyebrow-line"></span> TICKET DETAILS</div>
+    <h1>{{ ticket["Ticket Subject"] or "Untitled ticket" }}</h1>
+    <p class="subtitle">Ticket #{{ ticket["Ticket ID"] }} <span class="ticket-detail-dot">·</span> Personal identifiers are hidden</p>
+    <div class="ticket-detail-badges">
+      <span class="ticket-type-pill">{{ ticket["Ticket Type"] or "Uncategorized" }}</span>
+      <span class="priority-pill priority-{{ (ticket['Ticket Priority'] or '')|lower }}">{{ ticket["Ticket Priority"] or "No priority" }}</span>
+      <span class="status-pill">{{ ticket["Ticket Status"] or "No status" }}</span>
+    </div>
+  </div>
   <a class="button button-secondary" href="{{ url_for('tickets') }}">← Back to tickets</a>
 </section>
-<section class="detail-layout">
-  <article class="panel detail-main">
-    <div class="panel-heading"><div><h2>Ticket description</h2><p>Text is redacted for common contact details</p></div></div>
-    <div class="ticket-description">{{ ticket["Ticket Description"] or "No description provided." }}</div>
-    <div class="panel-divider"></div>
-    <div class="panel-heading"><div><h2>Existing resolution</h2><p>Historical dataset field; may be empty for unresolved tickets</p></div></div>
-    <div class="ticket-description resolution-text">{{ ticket["Resolution"] or "No resolution recorded." }}</div>
-  </article>
-  <aside class="panel detail-aside">
-    <div class="panel-heading"><div><h2>Ticket attributes</h2><p>Observed fields from source CSV</p></div></div>
-    <dl class="detail-list">
-      <div><dt>Type</dt><dd>{{ ticket["Ticket Type"] or "—" }}</dd></div>
-      <div><dt>Priority</dt><dd><span class="priority-pill priority-{{ (ticket['Ticket Priority'] or '')|lower }}">{{ ticket["Ticket Priority"] or "—" }}</span></dd></div>
-      <div><dt>Status</dt><dd>{{ ticket["Ticket Status"] or "—" }}</dd></div>
-      <div><dt>Channel</dt><dd>{{ ticket["Ticket Channel"] or "—" }}</dd></div>
-      <div><dt>Product</dt><dd>{{ ticket["Product Purchased"] or "—" }}</dd></div>
-      <div><dt>Date of purchase</dt><dd>{{ ticket["Date of Purchase"] or "—" }}</dd></div>
-      <div><dt>First response</dt><dd>{{ ticket["First Response Time"] or "—" }}</dd></div>
-      <div><dt>Time to resolution</dt><dd>{{ ticket["Time to Resolution"] or "—" }}</dd></div>
-      <div><dt>Satisfaction rating</dt><dd>{{ ticket["Customer Satisfaction Rating"] or "—" }}</dd></div>
-    </dl>
-    <div class="panel-divider"></div>
-    <div class="adaptive-ticket-control" data-ticket-id="{{ ticket['Ticket ID'] }}">
-      <div class="panel-heading"><div><h2>Adaptive AI</h2><p>Ticket-specific mode overrides workspace default</p></div></div>
-      <label class="adaptive-ticket-mode">Ticket mode
-        <select id="ticket-ai-mode">
-          <option value="workspace" {% if not ai_mode_override %}selected{% endif %}>Use workspace default ({{ ai_mode_details[workspace_ai_mode].label }})</option>
-          {% for mode in ["manual", "copilot", "selective", "autonomous", "takeover"] %}
-          <option value="{{ mode }}" {% if ai_mode_override == mode %}selected{% endif %}>{{ ai_mode_details[mode].label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      {% if ai_mode != "takeover" %}
-      <button class="button button-secondary adaptive-preview-ticket" type="button">Preview workflow (dry-run)</button>
-      <button class="button button-primary adaptive-run-ticket" type="button" disabled>Proceed with previewed workflow</button>
-      <section class="adaptive-dry-run-preview notice-box" hidden aria-live="polite"></section>
-      {% else %}
-      <div class="adaptive-takeover-banner">Human takeover active · AI processing is paused.</div>
-      {% endif %}
-      <p class="adaptive-inline-feedback" role="status" aria-live="polite"></p>
-      {% if ai_override and (ai_override.ticket_type or ai_override.ticket_priority) %}
-      <div class="adaptive-overlay">
-        <strong>Opslyra label overlay</strong>
-        <span>Category: {{ ai_override.ticket_type or "Unchanged" }}</span>
-        <span>Priority: {{ ai_override.ticket_priority or "Unchanged" }}</span>
-        <small>Workspace demo state only; source CSV values above are unchanged.</small>
-      </div>
-      {% endif %}
+<section class="ticket-detail-layout" aria-label="Ticket information">
+  <article class="panel ticket-description-card">
+    <div class="ticket-detail-section-heading">
+      <span class="ticket-section-icon ticket-section-blue" aria-hidden="true">▤</span>
+      <div><span class="ticket-section-kicker">01 / OVERVIEW</span><h2>Ticket description</h2><p>Original issue details, with common contact information redacted.</p></div>
     </div>
-  </aside>
+    <div class="ticket-description">{{ ticket["Ticket Description"] or "No description provided." }}</div>
+    <div class="ticket-resolution">
+      <div class="ticket-resolution-heading"><span class="ticket-section-icon ticket-section-green" aria-hidden="true">✓</span><div><span class="ticket-section-kicker">RESOLUTION</span><h3>Existing resolution</h3></div></div>
+      <p class="ticket-description resolution-text">{{ ticket["Resolution"] or "No resolution recorded." }}</p>
+    </div>
+  </article>
+
+  <article class="panel ticket-attributes-card">
+    <div class="ticket-detail-section-heading">
+      <span class="ticket-section-icon ticket-section-violet" aria-hidden="true">◈</span>
+      <div><span class="ticket-section-kicker">02 / RECORD</span><h2>Ticket attributes</h2><p>Key classification, product, and purchase fields from this record.</p></div>
+      <span class="ticket-attribute-count">6 FIELDS</span>
+    </div>
+    <dl class="ticket-attribute-grid">
+      <div class="ticket-attribute attribute-blue"><dt>Ticket type</dt><dd>{{ ticket["Ticket Type"] or "—" }}</dd><span class="attribute-mark" aria-hidden="true">◈</span></div>
+      <div class="ticket-attribute attribute-priority"><dt>Priority</dt><dd><span class="priority-pill priority-{{ (ticket['Ticket Priority'] or '')|lower }}">{{ ticket["Ticket Priority"] or "—" }}</span></dd><span class="attribute-mark" aria-hidden="true">↑</span></div>
+      <div class="ticket-attribute attribute-green"><dt>Status</dt><dd><span class="status-pill">{{ ticket["Ticket Status"] or "—" }}</span></dd><span class="attribute-mark" aria-hidden="true">●</span></div>
+      <div class="ticket-attribute attribute-violet"><dt>Channel</dt><dd>{{ ticket["Ticket Channel"] or "—" }}</dd><span class="attribute-mark" aria-hidden="true">↗</span></div>
+      <div class="ticket-attribute attribute-cyan"><dt>Product</dt><dd>{{ ticket["Product Purchased"] or "—" }}</dd><span class="attribute-mark" aria-hidden="true">◇</span></div>
+      <div class="ticket-attribute attribute-amber"><dt>Date of purchase</dt><dd>{{ ticket["Date of Purchase"] or "—" }}</dd><span class="attribute-mark" aria-hidden="true">▦</span></div>
+    </dl>
+  </article>
 </section>
 <section class="panel adaptive-ticket-history">
   <div class="panel-heading"><div><h2>AI activity timeline</h2><p>Suggestions, decisions, mode changes, and local workflow results</p></div><span class="panel-chip">{{ ai_activity|length }} EVENTS</span></div>

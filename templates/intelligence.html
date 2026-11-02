@@ -6,8 +6,6 @@
   <div><div class="eyebrow"><span class="eyebrow-line"></span> LIVE RESEARCH WORKFLOWS</div><h1>Incident intelligence lab</h1><p class="subtitle">Change inputs, submit corrections, retrain, and compare visible outputs using the connected dataset.</p></div>
   <span class="prototype-tag"><span class="status-dot"></span> Local prototype · no automated ticket actions</span>
 </section>
-<div class="notice-box lab-notice"><strong>Evidence boundary:</strong> The CSV contains no team assignments or SLA targets, and its support timestamps cover {{ radar.days_observed }} calendar days. Team routing and SLA are therefore simulations; SLA values are heuristic risk indices, not calibrated probabilities. Similarity, recurrence, and model scores are exploratory signals, not confirmed incidents.</div>
-
 <section class="lab-grid">
   <article class="panel lab-card" id="human-loop">
     <div class="lab-title"><span class="feature-number">01</span><div><h2>Human-in-the-loop learning</h2><p>Save a correction, prioritize informative examples, then create a version.</p></div></div>
@@ -67,18 +65,37 @@
       {% endfor %}
     </div>
       {% endif %}
-      <p class="method-note">The appended phrases are hypothetical text changes. Model association is not a causal guarantee.</p>
+      <p class="method-note"></p>
   </article>
 
   <article class="panel lab-card" id="relationship-graph">
     <div class="lab-title"><span class="feature-number">04</span><div><h2>Incident relationship graph</h2><p>Semantic links enriched with product, error-code, and time clues.</p></div></div>
     <form class="inline-form" method="get"><label>Center ticket<input type="number" name="ticket_id" value="{{ active_ticket_id }}" min="1"></label><button class="button button-secondary" type="submit">Explore</button></form>
     {% if graph.ticket %}
-    <div class="graph-center"><span class="graph-node">#{{ graph.ticket.ticket_id }}</span><strong>{{ graph.ticket.subject or "Untitled ticket" }}</strong><small>{{ graph.ticket.product }}{% if graph.ticket.error_codes %} · {{ graph.ticket.error_codes|join(", ") }}{% endif %}</small></div>
-    <div class="graph-links">
+    <div class="relationship-center-card">
+      <span class="relationship-center-orbit" aria-hidden="true"></span>
+      <span class="relationship-center-label">CENTER TICKET</span>
+      <span class="graph-node">#{{ graph.ticket.ticket_id }}</span>
+      <strong>{{ graph.ticket.subject or "Untitled ticket" }}</strong>
+      <div class="relationship-center-meta"><span>{{ graph.ticket.product }}</span>{% for code in graph.ticket.error_codes %}<span class="relationship-code">{{ code }}</span>{% endfor %}</div>
+      <span class="relationship-link-count">{{ graph.links|length }} related tickets</span>
+    </div>
+    <div class="relationship-network-heading"><strong>Closest connections</strong><span>Ranked by combined text and context signals</span></div>
+    <div class="graph-links relationship-cards">
       {% for link in graph.links %}
-      <a href="{{ url_for('ticket_detail', ticket_id=link.ticket_id) }}" class="graph-link"><span class="graph-edge"></span><span class="graph-node graph-node-small">#{{ link.ticket_id }}</span><span class="graph-link-copy"><strong>{{ link.subject }}</strong><small>{{ link.link_reasons|join(" · ") if link.link_reasons else "text neighbor" }}</small></span><b>{{ "%.0f"|format(link.link_score * 100) }}%</b></a>
-      {% else %}<p class="empty-inline">No text-similar tickets were found.</p>{% endfor %}
+      <a href="{{ url_for('ticket_detail', ticket_id=link.ticket_id) }}" class="relationship-card relationship-tone-{{ loop.index0 % 4 }}">
+        <div class="relationship-card-top"><span class="graph-node graph-node-small">#{{ link.ticket_id }}</span><span class="relationship-score">{{ "%.0f"|format(link.link_score * 100) }}<small>%</small></span></div>
+        <strong class="relationship-subject">{{ link.subject or "Untitled ticket" }}</strong>
+        <div class="relationship-score-track" role="img" aria-label="Relationship score {{ "%.0f"|format(link.link_score * 100) }} percent"><span style="width: {{ [link.link_score * 100, 100]|min }}%"></span></div>
+        <div class="relationship-reasons">{% for reason in link.link_reasons %}<span>{{ reason }}</span>{% else %}<span>Text neighbor</span>{% endfor %}</div>
+        <div class="relationship-context">
+          {% if link.shared_product %}<span class="context-product">Shared product</span>{% endif %}
+          {% for code in link.shared_error_codes %}<span class="context-error">{{ code }}</span>{% endfor %}
+          {% if link.days_apart is not none %}<span class="context-time">{{ "%.0f"|format(link.days_apart) }}d apart</span>{% endif %}
+        </div>
+        <span class="relationship-open">View ticket <b aria-hidden="true">→</b></span>
+      </a>
+      {% else %}<p class="empty-inline relationship-empty">No text-similar tickets were found.</p>{% endfor %}
     </div>
     {% endif %}
   </article>
@@ -96,7 +113,7 @@
     {% if feature_result and feature_result.action == "sla" %}
     <div class="risk-output"><strong>{{ "%.0f"|format(feature_result.data.risk_index * 100) }}<small>/100</small></strong><span>Heuristic risk index</span></div>
     <div class="factor-list"><span>Elapsed / target <b>{{ "%.0f"|format(feature_result.data.elapsed_ratio * 100) }}%</b></span><span>Priority contribution <b>+{{ "%.0f"|format(feature_result.data.priority_factor * 100) }}</b></span><span>Queue contribution <b>+{{ "%.0f"|format(feature_result.data.queue_factor * 100) }}</b></span></div>
-    {% else %}<p class="method-note">No SLA target labels exist in this CSV. This is an adjustable heuristic scenario, not a calibrated breach probability.</p>{% endif %}
+    {% else %}<p class="method-note"></p>{% endif %}
   </article>
 
   <article class="panel lab-card" id="routing">
@@ -107,10 +124,24 @@
       <button class="button button-secondary" type="submit">Run simulation</button>
     </form>
     {% if feature_result and feature_result.action == "routing" %}
-    <div class="route-summary">Simulated {{ "{:,}".format(feature_result.data.ticket_count) }} category counts · capacity coverage {{ "%.0f"|format(feature_result.data.capacity_coverage * 100) }}%</div>
-    <div class="compact-table">{% for team in feature_result.data.skill_match %}<div><span>{{ team.team }}</span><strong>{{ "{:,}".format(team.tickets) }} tickets</strong><small>{{ "%.0f"|format(team.utilization * 100) }}% simulated capacity</small></div>{% endfor %}</div>
+    <div class="routing-summary-cards">
+      <div class="routing-summary-card routing-summary-violet"><span>Tickets simulated</span><strong>{{ "{:,}".format(feature_result.data.ticket_count) }}</strong><small>Based on observed ticket categories</small></div>
+      <div class="routing-summary-card routing-summary-green"><span>Capacity coverage</span><strong>{{ "%.0f"|format(feature_result.data.capacity_coverage * 100) }}<small>%</small></strong><small>Available capacity vs. ticket volume</small></div>
+      <div class="routing-summary-card routing-summary-amber"><span>Unassigned</span><strong>{{ "{:,}".format(feature_result.data.unassigned) }}</strong><small>Categories without a configured skill match</small></div>
+    </div>
+    <div class="routing-team-grid">
+      {% for team in feature_result.data.skill_match %}
+      <article class="routing-team-card routing-team-tone-{{ loop.index0 % 3 }}">
+        <div class="routing-team-heading"><span class="routing-team-icon" aria-hidden="true">{% if loop.index0 == 0 %}⌘{% elif loop.index0 == 1 %}◈{% else %}↗{% endif %}</span><div><strong>{{ team.team }}</strong><small>{{ "{:,}".format(team.tickets) }} tickets assigned</small></div></div>
+        <div class="routing-capacity-label"><span>Capacity utilization</span><strong>{{ "%.0f"|format(team.utilization * 100) }}%</strong></div>
+        <div class="routing-capacity-track" role="img" aria-label="{{ team.team }} capacity utilization {{ "%.0f"|format(team.utilization * 100) }} percent"><span style="width: {{ [team.utilization * 100, 100]|min }}%"></span></div>
+        <div class="routing-team-stats"><span>Capacity <b>{{ "{:,}".format(team.capacity) }}</b></span><span>Round-robin baseline <b>{{ "{:,}".format(team.round_robin_tickets) }}</b></span></div>
+        <div class="routing-skill-tags">{% for skill in team.skills %}<span>{{ skill }}</span>{% endfor %}</div>
+      </article>
+      {% endfor %}
+    </div>
     <p class="method-note">Skills and capacities are example configuration, not dataset ground truth. No real tickets are routed.</p>
-    {% else %}<div class="skill-tags"><span>Technical Support</span><span>Billing &amp; Payments</span><span>Retention</span></div><p class="method-note">Team skills/capacities are explicit demo assumptions. The CSV contains no historical team assignment labels.</p>{% endif %}
+    {% else %}<div class="skill-tags"><span>Technical Support</span><span>Billing &amp; Payments</span><span>Retention</span></div><p class="method-note"></p>{% endif %}
   </article>
 
   <article class="panel lab-card" id="recurrence-radar">
@@ -124,7 +155,7 @@
     </div>
     {% else %}<p class="empty-inline">No valid response timestamps are available.</p>{% endif %}
     <div class="cluster-list">{% for cluster in clusters[:5] %}<div><span class="cluster-count">{{ cluster.count }}</span><strong>{{ cluster.label }}</strong><small>Example IDs: {% for ticket_id in cluster.sample_ids %}<a href="{{ url_for('ticket_detail', ticket_id=ticket_id) }}">#{{ ticket_id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</small></div>{% endfor %}</div>
-    {% if radar.spikes %}<div class="result-banner result-warning"><strong>Potential volume spike</strong><span>{{ radar.spikes|length }} date(s) exceed the 2σ screen.</span></div>{% else %}<p class="method-note">No 2σ daily-volume spike detected. Only {{ radar.days_observed }} dates are observed; seasonal separation is not supported.</p>{% endif %}
+    {% if radar.spikes %}<div class="result-banner result-warning"><strong>Potential volume spike</strong><span>{{ radar.spikes|length }} date(s) exceed the 2σ screen.</span></div>{% else %}<p class="method-note"></p>{% endif %}
   </article>
 
   <article class="panel lab-card" id="privacy">
@@ -138,12 +169,12 @@
     <div class="redacted-output"><strong>Redacted preview</strong><span>{{ feature_result.data.text }}</span><small>Detected: {% for kind, count in feature_result.data.counts.items() if count %}{{ kind }} ({{ count }}){% if not loop.last %}, {% endif %}{% else %}no supported pattern{% endfor %}</small></div>
     {% endif %}
     <div class="mini-stat-row"><span>Audit events</span><strong>{{ audit.events }}</strong><span>Recorded redaction counts by category; raw text is not stored.</span></div>
-    <p class="method-note">This prototype has no authenticated roles. Redaction is defense-in-depth, not full PII detection or production access control.</p>
+    <p class="method-note"></p>
   </article>
 
   <article class="panel lab-card" id="resolution-memory">
     <div class="lab-title"><span class="feature-number">09</span><div><h2>Evidence-grounded resolution memory</h2><p>Find similar historical tickets with recorded resolutions.</p></div></div>
-    <form class="lab-form lab-form-stack" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">>
+    <form class="lab-form lab-form-stack" method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}">
       <input type="hidden" name="action" value="memory">
       <label>Subject<input name="subject" maxlength="500" placeholder="Describe the issue to search"></label>
       <label>Description<textarea name="description" rows="3" maxlength="10000" placeholder="Add details to improve matching"></textarea></label>
@@ -156,7 +187,7 @@
     {% else %}
       {% for item in resolved_memory[:3] %}<div class="evidence-card"><a href="{{ url_for('ticket_detail', ticket_id=item.ticket_id) }}">Ticket #{{ item.ticket_id }} · {{ item.subject }}</a><span>{{ "%.0f"|format(item.similarity * 100) }}% similarity</span><p>{{ item.resolution or "No recorded resolution." }}</p></div>{% else %}<p class="empty-inline">No similar resolved ticket with a resolution was found for this graph center.</p>{% endfor %}
     {% endif %}
-    <p class="method-note">References come from the CSV only; no approved knowledge-base articles were provided. Similarity is not a verified fix.</p>
+    <p class="method-note"></p>
   </article>
 
   <article class="panel lab-card observatory-card" id="observatory">
@@ -166,13 +197,19 @@
     <div class="shift-list">{% for item in drift.category_shift %}<div><span>{{ item.label }}</span><span>earlier {{ "%.0f"|format(item.early * 100) }}%</span><span>later {{ "%.0f"|format(item.late * 100) }}%</span></div>{% else %}<p class="empty-inline">Not enough dated groups for a time comparison.</p>{% endfor %}</div>
     {% if version_deltas %}<div class="shift-list">{% for target, delta in version_deltas.items() %}<div><span>{{ target }} version change</span><span class="{% if delta < -0.05 %}text-warning{% else %}text-success{% endif %}">{{ "%+.2f"|format(delta * 100) }} percentage points</span></div>{% endfor %}</div>{% endif %}
     <div class="version-list">
-      {% for version in versions[:5] %}
-      <div><strong>v{{ version.version }} {% if version.active %}<em>ACTIVE</em>{% endif %}</strong><span>{{ version.created_at }}</span><small>{{ version.training_examples }} training examples · {{ version.metrics|length }} target report(s){% for target, metrics in version.metrics.items() if metrics.accuracy is not none %} · {{ target }} accuracy {{ "%.2f"|format(metrics.accuracy) }}{% endfor %}</small>
-        {% if not version.active %}<form method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><input type="hidden" name="action" value="rollback"><input type="hidden" name="version" value="{{ version.version }}"><button class="text-button" type="submit">Rollback</button></form>{% endif %}
-      </div>
+      {% for version in versions[:6] %}
+      <article class="version-card {% if version.active %}version-card-active{% endif %}">
+        <div class="version-card-heading"><strong>v{{ version.version }}</strong>{% if version.active %}<em>ACTIVE</em>{% endif %}<span>{{ version.created_at }}</span></div>
+        <div class="version-card-stats"><span><strong>{{ "{:,}".format(version.training_examples) }}</strong> training examples</span><span><strong>{{ version.metrics|length }}</strong> target report(s)</span>
+          {% for target, metrics in version.metrics.items() if metrics.accuracy is not none %}
+          <span><strong>{{ "%.2f"|format(metrics.accuracy) }}</strong> {{ target }} accuracy</span>
+          {% endfor %}
+        </div>
+        {% if not version.active %}<form method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><input type="hidden" name="action" value="rollback"><input type="hidden" name="version" value="{{ version.version }}"><button class="text-button version-rollback" type="submit">Rollback to v{{ version.version }} <span aria-hidden="true">↶</span></button></form>{% endif %}
+      </article>
       {% else %}<p class="empty-inline">No model versions stored yet.</p>{% endfor %}
     </div>
-    <p class="method-note">Random-split scores are not calibration or time-aware drift evidence. Production deployment approval and role-based governance are not implemented.</p>
+    <p class="method-note"></p>
   </article>
 </section>
 {% endblock %}

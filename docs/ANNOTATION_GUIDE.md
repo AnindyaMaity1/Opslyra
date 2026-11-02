@@ -1,9 +1,11 @@
 # Independent ticket annotation guide
 
 Opslyra currently has no independently verified operational labels.
-Its supplied ticket labels are demo data, and Cohen's kappa is therefore
-**not measured**. Use this guide only when a real annotation study has
-been approved and can be conducted with appropriate privacy controls.
+The project owner identifies the supplied ticket CSV as Kaggle-sourced;
+its exact listing and the labels' operational validity have not been
+independently verified. Cohen's kappa is therefore **not measured**. Use
+this guide only when a real annotation study has been approved and can be
+conducted with appropriate privacy controls.
 
 ## Preparation
 

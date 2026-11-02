@@ -3,32 +3,54 @@
 {% block breadcrumb %}Tickets{% endblock %}
 {% block content %}
 <section class="page-heading compact-heading">
-  <div><div class="eyebrow"><span class="eyebrow-line"></span> WORKSPACE</div><h1>Tickets</h1><p class="subtitle">Search and filter the records in your connected dataset.</p></div>
-  <a class="button button-primary" href="{{ url_for('predict') }}"><span aria-hidden="true">✳</span> Classify a ticket</a>
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> TICKET WORKSPACE</div><h1>Ticket inbox <span class="heading-spark" aria-hidden="true">✦</span></h1><p class="subtitle">Search, prioritize, and explore every record in your connected dataset.</p></div>
+  <a class="button button-primary ticket-create-action" href="{{ url_for('predict') }}"><span aria-hidden="true">✳</span> Classify a ticket</a>
 </section>
+
+<section class="ticket-stats" aria-label="Dataset ticket summary">
+  <article class="ticket-stat-card">
+    <span class="ticket-stat-icon ticket-stat-blue" aria-hidden="true">▤</span>
+    <div><span class="ticket-stat-label">Total tickets</span><strong>{{ "{:,}".format(ticket_stats.total) }}</strong><small>Across the connected dataset</small></div>
+  </article>
+  <article class="ticket-stat-card">
+    <span class="ticket-stat-icon ticket-stat-red" aria-hidden="true">↑</span>
+    <div><span class="ticket-stat-label">Critical priority</span><strong>{{ "{:,}".format(ticket_stats.critical) }}</strong><small>Marked critical in the dataset</small></div>
+  </article>
+  <article class="ticket-stat-card">
+    <span class="ticket-stat-icon ticket-stat-amber" aria-hidden="true">↗</span>
+    <div><span class="ticket-stat-label">High priority</span><strong>{{ "{:,}".format(ticket_stats.high) }}</strong><small>Marked high in the dataset</small></div>
+  </article>
+  <article class="ticket-stat-card">
+    <span class="ticket-stat-icon ticket-stat-green" aria-hidden="true">◈</span>
+    <div><span class="ticket-stat-label">Ticket types</span><strong>{{ ticket_stats.types }}</strong><small>Distinct labeled categories</small></div>
+  </article>
+</section>
+
 <section class="panel ticket-panel">
+  <div class="ticket-toolbar">
+    <div><h2>All tickets</h2><p>Filter the dataset to find the records you need.</p></div>
+    <span class="ticket-live-status"><i aria-hidden="true"></i> Dataset connected</span>
+  </div>
   <form class="filter-form" action="{{ url_for('tickets') }}" method="get">
-    <label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">Search tickets</span><input type="search" name="q" value="{{ query }}" placeholder="Search ticket ID or text"></label>
+    <label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">Search tickets</span><input type="search" name="q" value="{{ query }}" placeholder="Search by ticket ID, subject, or description"></label>
     <label><span class="sr-only">Filter by type</span><select name="type"><option value="">All types</option>{% for option in options["Ticket Type"] %}<option value="{{ option }}" {% if option|lower == selected_type|lower %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></label>
     <label><span class="sr-only">Filter by priority</span><select name="priority"><option value="">All priorities</option>{% for option in options["Ticket Priority"] %}<option value="{{ option }}" {% if option|lower == selected_priority|lower %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></label>
     <label><span class="sr-only">Filter by status</span><select name="status"><option value="">All statuses</option>{% for option in options["Ticket Status"] %}<option value="{{ option }}" {% if option|lower == selected_status|lower %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></label>
     <button class="button button-filter" type="submit">Apply filters</button>
     {% if query or selected_type or selected_priority or selected_status %}<a class="clear-link" href="{{ url_for('tickets') }}">Clear</a>{% endif %}
   </form>
-  <div class="table-caption"><span><strong>{{ "{:,}".format(total) }}</strong> matching tickets</span><span>Personal names and email addresses are not shown</span></div>
+  <div class="table-caption"><span><strong>{{ "{:,}".format(total) }}</strong> matching tickets <span class="ticket-caption-divider">·</span> {% if query or selected_type or selected_priority or selected_status %}Filtered results{% else %}Showing the connected dataset{% endif %}</span><span>Personal names and email addresses are hidden</span></div>
   {% if tickets %}
   <div class="table-wrap">
     <table class="ticket-table">
-      <thead><tr><th scope="col">Ticket</th><th scope="col">Type</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Channel</th><th scope="col">Product</th><th scope="col"><span class="sr-only">Open details</span></th></tr></thead>
+      <thead><tr><th scope="col">Ticket details</th><th scope="col">Type</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Open details</span></th></tr></thead>
       <tbody>
         {% for item in tickets %}
         <tr>
           <td><a class="ticket-subject" href="{{ url_for('ticket_detail', ticket_id=item['Ticket ID']) }}">{{ item["Ticket Subject"] or "Untitled ticket" }}</a><span class="ticket-id">#{{ item["Ticket ID"] }}</span></td>
-          <td>{{ item["Ticket Type"] or "—" }}</td>
+          <td><span class="ticket-type-pill {% if (item['Ticket Type'] or '')|lower == 'billing inquiry' %}type-billing{% elif (item['Ticket Type'] or '')|lower == 'cancellation request' %}type-cancellation{% elif (item['Ticket Type'] or '')|lower == 'product inquiry' %}type-product{% elif (item['Ticket Type'] or '')|lower == 'refund request' %}type-refund{% elif (item['Ticket Type'] or '')|lower == 'technical issue' %}type-technical{% endif %}">{{ item["Ticket Type"] or "—" }}</span></td>
           <td><span class="priority-pill priority-{{ (item['Ticket Priority'] or '')|lower }}">{{ item["Ticket Priority"] or "—" }}</span></td>
-          <td><span class="status-pill">{{ item["Ticket Status"] or "—" }}</span></td>
-          <td>{{ item["Ticket Channel"] or "—" }}</td>
-          <td>{{ item["Product Purchased"] or "—" }}</td>
+          <td><span class="status-pill {% if (item['Ticket Status'] or '')|lower == 'open' %}status-open{% elif (item['Ticket Status'] or '')|lower == 'closed' %}status-closed{% elif (item['Ticket Status'] or '')|lower == 'pending customer response' %}status-pending{% elif (item['Ticket Status'] or '')|lower == 'in progress' %}status-progress{% endif %}">{{ item["Ticket Status"] or "—" }}</span></td>
           <td><a class="row-link" href="{{ url_for('ticket_detail', ticket_id=item['Ticket ID']) }}" aria-label="Open ticket {{ item['Ticket ID'] }}">→</a></td>
         </tr>
         {% endfor %}

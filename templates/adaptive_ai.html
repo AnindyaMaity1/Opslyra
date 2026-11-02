@@ -62,7 +62,7 @@
         <span><input name="target_risk" type="number" min="0.00" max="1.00" step="0.05" value="{{ '%.2f'|format(settings.policy.target_risk if settings.policy.target_risk is not none else 0.10) }}" required><small>0–100%</small></span>
       </label>
       <button class="button button-primary" type="submit">Save policy</button>
-      <p class="adaptive-score-warning">The confidence cut-off is selected from a held-in validation risk–coverage curve, separately for category and priority. It is not calibrated confidence or production authorization. If validation support is insufficient, actions are escalated for review.</p>
+      <p class="adaptive-score-warning"></p>
     </form>
   </article>
   <article class="panel adaptive-boundary-panel">
@@ -74,7 +74,7 @@
       <li>Risk escalation uses a small keyword list; it is not a security classifier or comprehensive risk detector.</li>
       <li>Never edit the source CSV, send customer replies, or call external ticketing systems.</li>
     </ul>
-    <div class="adaptive-warning">Single-user local prototype: authentication and role-based permissions are not implemented. Modes are workflow controls, not an access-control boundary.</div>
+    <div class="adaptive-warning"></div>
   </article>
 </section>
 
@@ -133,7 +133,7 @@
       </article>
     {% endfor %}
   </div>
-  <p class="adaptive-score-warning">Curves use normalized exact-text-grouped validation splits. Selective risk is measured against existing dataset labels; confidence scores are uncalibrated. Points summarize the validation set and may be noisy. This curve is diagnostic and does not guarantee future risk.</p>
+  <p class="adaptive-score-warning"></p>
 </section>
 
 <section class="adaptive-feedback-grid" aria-label="Human review outcomes">

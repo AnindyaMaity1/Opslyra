@@ -29,6 +29,32 @@ CV_SEEDS = (0, 1, 2)
 CV_FOLDS = 3
 
 
+def has_current_evaluation_report(report: Any) -> bool:
+    if not isinstance(report, dict):
+        return False
+    cross_validation = report.get("cross_validation")
+    chronological = report.get("chronological")
+    if not isinstance(cross_validation, dict) or not isinstance(chronological, dict):
+        return False
+    if report.get("accuracy") is None:
+        return isinstance(cross_validation.get("note"), str)
+
+    metrics = cross_validation.get("metrics")
+    if not isinstance(metrics, dict):
+        return False
+    for metric in ("accuracy", "macro_f1", "weighted_f1"):
+        summary = metrics.get(metric)
+        if not isinstance(summary, dict) or any(
+            summary.get(bound) is None
+            for bound in ("mean", "ci95_low", "ci95_high")
+        ):
+            return False
+    return all(
+        report.get(metric) is not None
+        for metric in ("expected_calibration_error", "multiclass_brier_score")
+    )
+
+
 def _correction_examples(
     frame: pd.DataFrame,
     texts: pd.Series,

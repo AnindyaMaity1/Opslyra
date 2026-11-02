@@ -44,7 +44,7 @@ from intelligence import (
     routing_simulation,
     sla_risk_sandbox,
 )
-from models import predict_ticket, train_baselines
+from models import has_current_evaluation_report, predict_ticket, train_baselines
 from research import (
     active_learning_benchmark,
     active_learning_queue,
@@ -68,7 +68,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         DATASET_PATH=os.environ.get(
             "TICKETMIND_DATASET", str(ROOT / "customer_support_tickets.csv")
         ),
-        ITEMS_PER_PAGE=20,
+        ITEMS_PER_PAGE=10,
         MAX_CONTENT_LENGTH=16 * 1024 * 1024,
         STATE_DATABASE=str(ROOT / "instance" / "ticketmind.sqlite3"),
         MODEL_ARTIFACTS=str(ROOT / "instance" / "models"),
@@ -233,9 +233,19 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                 artifact_root = Path(app.config["MODEL_ARTIFACTS"]).resolve()
                 if artifact_path.is_relative_to(artifact_root) and artifact_path.is_file():
                     artifact = joblib.load(artifact_path)
-                    if artifact.get("dataset_fingerprint") == fingerprint:
+                    reports = artifact.get("reports")
+                    reports_are_current = isinstance(reports, dict) and all(
+                        has_current_evaluation_report(reports[target])
+                        for target in ("Ticket Type", "Ticket Priority")
+                        if target in reports
+                    )
+                    if (
+                        artifact.get("dataset_fingerprint") == fingerprint
+                        and reports_are_current
+                        and isinstance(artifact.get("estimators"), dict)
+                    ):
                         models["estimators"] = artifact["estimators"]
-                        models["reports"] = artifact["reports"]
+                        models["reports"] = reports
                         models["fingerprint"] = fingerprint
                         return
         redacted_counts: dict[str, int] = {}
@@ -915,10 +925,31 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             column: sorted(frame[column].dropna().astype(str).unique().tolist())
             for column in ("Ticket Type", "Ticket Priority", "Ticket Status")
         }
+        ticket_stats = {
+            "total": len(frame),
+            "critical": int(
+                frame["Ticket Priority"]
+                .astype("string")
+                .str.strip()
+                .str.casefold()
+                .eq("critical")
+                .sum()
+            ),
+            "high": int(
+                frame["Ticket Priority"]
+                .astype("string")
+                .str.strip()
+                .str.casefold()
+                .eq("high")
+                .sum()
+            ),
+            "types": int(frame["Ticket Type"].nunique()),
+        }
         return render_template(
             "tickets.html",
             tickets=records,
             total=total,
+            ticket_stats=ticket_stats,
             page=page,
             pages=pages,
             query=search,

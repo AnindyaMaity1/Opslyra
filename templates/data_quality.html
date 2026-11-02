@@ -8,8 +8,6 @@
 </section>
 {% if profile.validation_issues %}
 <div class="notice-box result-warning" role="status"><strong>Validation findings</strong><ul>{% for issue in profile.validation_issues %}<li>{{ issue }}</li>{% endfor %}</ul></div>
-{% else %}
-<div class="notice-box"><strong>Validation:</strong> no schema or parseability issues were detected. Missing values remain missing in the raw representation; model preparation does not mutate this page's dataset.</div>
 {% endif %}
 <section class="metric-grid quality-metrics">
   <article class="metric-card"><div class="metric-top"><span class="metric-label">Rows inspected</span><span class="metric-icon icon-blue">▤</span></div><div class="metric-value">{{ "{:,}".format(profile.row_count) }}</div><div class="metric-foot"><span class="metric-note">{{ profile.column_count }} required columns present</span></div></article>
@@ -45,7 +43,6 @@
       <div class="date-check"><div><strong>{{ field }}</strong><span>{{ "{:,}".format(result.present) }} non-blank values</span></div><div class="date-result"><span class="text-success">{{ "{:,}".format(result.parseable) }} parseable</span>{% if result.unparseable %}<span class="text-warning">{{ result.unparseable }} invalid</span>{% endif %}</div></div>
       {% endfor %}
     </div>
-    <p class="notice-box">“First Response Time” and “Time to Resolution” are treated as source timestamp fields here. This report does not interpret their values as elapsed durations or infer SLA performance.</p>
   </article>
 </section>
 <section class="panel labels-panel">

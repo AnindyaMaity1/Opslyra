@@ -2,23 +2,96 @@
 {% block title %}Model evaluation{% endblock %}
 {% block breadcrumb %}Model evaluation{% endblock %}
 {% block content %}
-<section class="page-heading compact-heading">
-  <div><div class="eyebrow"><span class="eyebrow-line"></span> MACHINE LEARNING</div><h1>Baseline evaluation</h1><p class="subtitle">TF–IDF and logistic regression using ticket subject and description only.</p></div>
-  <form method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><button class="button button-primary" type="submit">↻ Train baseline</button></form>
+<section class="page-heading model-page-heading">
+  <div>
+    <div class="eyebrow"><span class="eyebrow-line"></span> MODEL INTELLIGENCE</div>
+    <h1>Model evaluation <span class="heading-spark" aria-hidden="true">✦</span></h1>
+    <p class="subtitle">A clear view of how ticket classifiers perform across repeated, grouped validation.</p>
+  </div>
+  <form method="post"><input type="hidden" name="csrf_token" value="{{ adaptive_csrf_token }}"><button class="button button-primary" type="submit"><span aria-hidden="true">↻</span> Train baseline</button></form>
 </section>
-<div class="notice-box model-notice"><strong>Evaluation protocol.</strong> Reported metrics use up to 3-fold stratified cross-validation across seeds 0, 1, and 2, keeping normalized identical text in one fold. The final prediction model is then fitted on all eligible labeled rows. Confidence intervals are descriptive across fold/seed scores. A separate chronological holdout is shown only when timestamp provenance is verified.</div>
+
+<section class="evaluation-overview" aria-label="Evaluation overview">
+  <div class="evaluation-overview-card">
+    <span class="evaluation-overview-icon evaluation-icon-blue" aria-hidden="true">⌁</span>
+    <div><span class="evaluation-overview-label">Validation design</span><strong>Stratified cross-validation</strong><small>Identical text stays together</small></div>
+  </div>
+  <div class="evaluation-overview-card">
+    <span class="evaluation-overview-icon evaluation-icon-violet" aria-hidden="true">◷</span>
+    <div><span class="evaluation-overview-label">Evaluation focus</span><strong>Generalization</strong><small>Fold and seed score ranges</small></div>
+  </div>
+  <div class="evaluation-overview-card">
+    <span class="evaluation-overview-icon evaluation-icon-green" aria-hidden="true">◎</span>
+    <div><span class="evaluation-overview-label">Model family</span><strong>TF–IDF + Logistic Regression</strong><small>Subject and description features</small></div>
+  </div>
+</section>
+
+<div class="evaluation-protocol"><span class="protocol-indicator" aria-hidden="true"></span><p><strong>Evaluation protocol</strong><span>Metrics use up to 3-fold stratified cross-validation across seeds 0, 1, and 2, keeping normalized identical text in one fold. Confidence intervals are descriptive across fold/seed scores. A chronological holdout is shown only when timestamp provenance is verified.</span></p></div>
+
 {% if reports %}
-<section class="model-grid">
+<section class="model-grid" aria-label="Model performance by target">
   {% for target, report in reports.items() %}
   <article class="panel model-card">
-    <div class="panel-heading"><div><h2>{{ target }}</h2><p>{{ "{:,}".format(report.training_rows) }} rows in final model · {{ "{:,}".format(report.labeled_rows or 0) }} labeled rows evaluated</p></div><span class="model-badge">TF-IDF</span></div>
-    {% if report.accuracy is not none %}
-    <div class="model-metrics">
-      <div><span>Accuracy · mean [95% CI]</span><strong>{{ "%.1f"|format(report.cross_validation.metrics.accuracy.mean * 100) }}<small>%</small></strong><small>[{{ "%.1f"|format(report.cross_validation.metrics.accuracy.ci95_low * 100) }}, {{ "%.1f"|format(report.cross_validation.metrics.accuracy.ci95_high * 100) }}]</small></div>
-      <div><span>Macro F1 · mean [95% CI]</span><strong>{{ "%.1f"|format(report.cross_validation.metrics.macro_f1.mean * 100) }}<small>%</small></strong><small>[{{ "%.1f"|format(report.cross_validation.metrics.macro_f1.ci95_low * 100) }}, {{ "%.1f"|format(report.cross_validation.metrics.macro_f1.ci95_high * 100) }}]</small></div>
-      <div><span>Weighted F1 · mean [95% CI]</span><strong>{{ "%.1f"|format(report.cross_validation.metrics.weighted_f1.mean * 100) }}<small>%</small></strong><small>[{{ "%.1f"|format(report.cross_validation.metrics.weighted_f1.ci95_low * 100) }}, {{ "%.1f"|format(report.cross_validation.metrics.weighted_f1.ci95_high * 100) }}]</small></div>
+    <div class="model-card-heading">
+      <div>
+        <div class="model-target-label">TARGET MODEL</div>
+        <h2>{{ target }}</h2>
+        <p>{{ "{:,}".format(report.training_rows) }} rows used to fit final model <span class="model-dot">·</span> {{ "{:,}".format(report.labeled_rows or 0) }} labeled rows evaluated</p>
+      </div>
+      <span class="model-badge"><span aria-hidden="true">✦</span> BASELINE</span>
     </div>
-    <div class="calibration-note">Repeated grouped CV · {{ report.cross_validation.folds }} folds × {{ report.cross_validation.seeds|length }} seeds · ECE {{ "%.3f"|format(report.expected_calibration_error) }} · multiclass Brier {{ "%.3f"|format(report.multiclass_brier_score) }}</div>
+
+    {% if report.accuracy is not none and (report.cross_validation is not defined or report.cross_validation.metrics is not defined) %}
+    <div class="notice-box">This saved report is outdated. Retrain the baseline to refresh its cross-validation results.</div>
+    {% elif report.accuracy is not none %}
+    <div class="model-metrics">
+      <div class="model-metric-primary"><span>Accuracy</span><strong>{{ "%.1f"|format(report.cross_validation.metrics.accuracy.mean * 100) }}<small>%</small></strong><small class="metric-ci">95% CI {{ "%.1f"|format(report.cross_validation.metrics.accuracy.ci95_low * 100) }}–{{ "%.1f"|format(report.cross_validation.metrics.accuracy.ci95_high * 100) }}%</small></div>
+      <div><span>Macro F1</span><strong>{{ "%.1f"|format(report.cross_validation.metrics.macro_f1.mean * 100) }}<small>%</small></strong><small class="metric-ci">95% CI {{ "%.1f"|format(report.cross_validation.metrics.macro_f1.ci95_low * 100) }}–{{ "%.1f"|format(report.cross_validation.metrics.macro_f1.ci95_high * 100) }}%</small></div>
+      <div><span>Weighted F1</span><strong>{{ "%.1f"|format(report.cross_validation.metrics.weighted_f1.mean * 100) }}<small>%</small></strong><small class="metric-ci">95% CI {{ "%.1f"|format(report.cross_validation.metrics.weighted_f1.ci95_low * 100) }}–{{ "%.1f"|format(report.cross_validation.metrics.weighted_f1.ci95_high * 100) }}%</small></div>
+    </div>
+
+    <section class="class-performance" aria-label="{{ target }} per-class performance chart">
+      <div class="model-section-heading"><div><h3>Class performance</h3><p>F1 at a glance, with precision and recall for every label</p></div><div class="class-chart-legend" aria-label="Chart legend"><span><i class="legend-precision"></i>Precision</span><span><i class="legend-recall"></i>Recall</span></div></div>
+      {% set class_labels = report.classes.keys()|reject("in", ["accuracy", "macro avg", "weighted avg"])|list %}
+      {% set refund_technical_pair = "Refund request" in class_labels and "Technical issue" in class_labels %}
+      {% if class_labels %}
+      <div class="class-chart class-chart-count-{{ class_labels|length }}{% if refund_technical_pair %} class-chart-refund-technical{% endif %}" aria-label="{{ target }} class performance infographic">
+        {% for label in class_labels %}
+        {% set scores = report.classes[label] %}
+        <article class="class-score-card class-tone-{{ loop.index0 % 5 }}{% if refund_technical_pair and label in ['Refund request', 'Technical issue'] %} class-score-card-paired{% endif %}" aria-label="{{ label }}: F1 {{ "%.1f"|format(scores["f1-score"] * 100) }} percent, precision {{ "%.1f"|format(scores.precision * 100) }} percent, recall {{ "%.1f"|format(scores.recall * 100) }} percent, support {{ "{:,}".format(scores.support|int) }}">
+          <div class="class-score-heading"><strong title="{{ label }}">{{ label }}</strong><span>{{ "{:,}".format(scores.support|int) }} samples</span></div>
+          <div class="class-score-main">
+            <svg class="class-score-ring" viewBox="0 0 80 80" aria-hidden="true">
+              <circle class="class-score-ring-track" cx="40" cy="40" r="31"></circle>
+              <circle class="class-score-progress" cx="40" cy="40" r="31" style="stroke-dasharray: 194.78; stroke-dashoffset: {{ "%.2f"|format(194.78 * (1 - scores["f1-score"])) }}"></circle>
+            </svg>
+            <div class="class-score-value"><strong>{{ "%.0f"|format(scores["f1-score"] * 100) }}<small>%</small></strong><span>F1 score</span></div>
+          </div>
+          <div class="class-score-details">
+            <div class="class-score-detail"><span>Precision</span><div class="class-metric-track"><i class="class-score-precision" style="width: {{ [scores.precision * 100, 100]|min }}%"></i></div><strong>{{ "%.0f"|format(scores.precision * 100) }}%</strong></div>
+            <div class="class-score-detail"><span>Recall</span><div class="class-metric-track"><i class="class-score-recall" style="width: {{ [scores.recall * 100, 100]|min }}%"></i></div><strong>{{ "%.0f"|format(scores.recall * 100) }}%</strong></div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="empty-inline">Per-class scores are not available for this report.</p>
+      {% endif %}
+    </section>
+
+    <div class="class-table-wrap">
+      <table class="class-table">
+        <caption>{{ target }} classification metrics</caption>
+        <thead><tr><th scope="col">Class</th><th scope="col">Precision</th><th scope="col">Recall</th><th scope="col">F1 score</th><th scope="col">Support</th></tr></thead>
+        <tbody>
+          {% for label, scores in report.classes.items() if label not in ["accuracy", "macro avg", "weighted avg"] %}
+          <tr><th scope="row">{{ label }}</th><td>{{ "%.3f"|format(scores.precision) }}</td><td>{{ "%.3f"|format(scores.recall) }}</td><td><strong>{{ "%.3f"|format(scores["f1-score"]) }}</strong></td><td>{{ "{:,}".format(scores.support|int) }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="model-meta-row"><span class="model-meta-icon" aria-hidden="true">◷</span><span><strong>Repeated grouped CV · {{ report.cross_validation.folds }} folds × {{ report.cross_validation.seeds|length }} seeds</strong><small>Expected calibration error {{ "%.3f"|format(report.expected_calibration_error) }} <span>·</span> Multiclass Brier {{ "%.3f"|format(report.multiclass_brier_score) }}</small></span></div>
     <p class="model-evaluation-note">{{ report.cross_validation.note }}</p>
     {% else %}
     <div class="notice-box">
@@ -31,20 +104,16 @@
       {% endif %}
     </div>
     {% endif %}
+
     {% if report.chronological is defined %}
     <div class="model-chronological"><strong>Chronological holdout</strong>
       {% if report.chronological.status == "ok" %}
-        <span>{{ report.chronological.test_rows }} later rows · accuracy {{ "%.1f"|format(report.chronological.metrics.accuracy * 100) }}% · cutoff {{ report.chronological.cutoff }}</span>
+        <span>{{ report.chronological.test_rows }} later rows <span>·</span> accuracy {{ "%.1f"|format(report.chronological.metrics.accuracy * 100) }}% <span>·</span> cutoff {{ report.chronological.cutoff }}</span>
       {% else %}
         <span>Unavailable: {{ report.chronological.detail.reason }}</span>
       {% endif %}
     </div>
     {% endif %}
-    <div class="class-report">
-      {% for label, scores in report.classes.items() if label not in ["accuracy", "macro avg", "weighted avg"] %}
-      <div><span>{{ label }}</span><span>Precision {{ "%.2f"|format(scores.precision) }}</span><strong>Recall {{ "%.2f"|format(scores.recall) }}</strong></div>
-      {% endfor %}
-    </div>
   </article>
   {% endfor %}
 </section>
