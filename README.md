@@ -153,7 +153,7 @@ Opslyra is a research prototype with the following limitations:
 
 Before using the system with real operational data, review data governance, privacy requirements, security controls, model validation, and deployment architecture.
 
-## 9. Example Use Cases
+## 8. Example Use Cases
 
 Opslyra can be used for:
 
@@ -166,7 +166,7 @@ Opslyra can be used for:
 -   Exploring simulated routing and SLA-risk scenarios.
 
 
-## 12. Summary
+## 9. Summary
 
 Opslyra demonstrates a local workflow for customer-support ticket intelligence by combining:
 
