@@ -1,3 +1,8 @@
+/**
+ * Copyright © 2026 Anindya Sundar Maity.
+ * All Rights Reserved.
+ */
+
 (() => {
   const csrfToken = document.querySelector('meta[name="adaptive-csrf-token"]')?.content;
 
