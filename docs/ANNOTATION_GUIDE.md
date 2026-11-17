@@ -63,3 +63,9 @@ Report the sample selection, annotator independence, codebook version,
 missing-label exclusions, overlap count, per-label agreement, and any
 adjudication procedure. Do not claim inter-annotator reliability until
 the calculation has been run on genuine independent annotations.
+
+
+## License
+
+Copyright © 2026 Anindya Sundar Maity.
+All Rights Reserved.
