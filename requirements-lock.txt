@@ -1,5 +1,5 @@
-Copyright © 2026 Anindya Sundar Maity.
-All Rights Reserved.
+#Copyright © 2026 Anindya Sundar Maity.
+#All Rights Reserved.
 
 # Exact dependency set used by the Python 3.13.1 test environment.
 Flask==3.1.3
