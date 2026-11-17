@@ -1,3 +1,6 @@
+Copyright © 2026 Anindya Sundar Maity.
+All Rights Reserved.
+
 PYTHON ?= python
 OUTPUT ?= instance/experiments
 SEEDS ?= 0,1,2
