@@ -1,3 +1,6 @@
+# Copyright © 2026 Anindya Sundar Maity.
+# All Rights Reserved.
+
 from __future__ import annotations
 
 import time
