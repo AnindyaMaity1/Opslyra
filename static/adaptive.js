@@ -3,6 +3,7 @@
  * All Rights Reserved.
  */
 
+
 (() => {
   const csrfToken = document.querySelector('meta[name="adaptive-csrf-token"]')?.content;
 
