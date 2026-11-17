@@ -180,6 +180,10 @@ Opslyra demonstrates a local workflow for customer-support ticket intelligence b
 Opslyra is best understood as a transparent, research-oriented prototype for exploring AI-assisted ticket operations. Further work should focus on dataset validation, stronger privacy and security controls, rigorous
 evaluation, and carefully governed integration with real support systems.
 
-## 10. License
+## 10. Dataset Request
+
+If you require access to the dataset used in this project, kindly contact the copyright owner and formally request access. Dataset access will be provided only upon approval and subject to the applicable terms and conditions.
+
+## 11. License
 
 Copyright © 2026 Anindya Sundar Maity. All Rights Reserved.
