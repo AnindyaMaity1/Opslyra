@@ -1,6 +1,3 @@
-Copyright © 2026 Anindya Sundar Maity.
-All Rights Reserved.
-
 Flask>=3.0,<4.0
 joblib>=1.3,<2.0
 numpy>=1.26,<3.0
